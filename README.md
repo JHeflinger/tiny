@@ -26,6 +26,7 @@ Tiny works right out of the box, so you can just run it in your project's workin
 To configure Tiny to be a bit more accustomed to your use, make a `.tinyconf` file in your working directory. In `.tinyconf`, there are several options you can use to configure your project:
 
 | Precursor | Value | Description |
+| --------- | ----- | ----------- |
 | PROJECT | <path_to_directory | This is where your project files that you will be working with should be located! All your `.c` and `.h` files should be here. |
 | MAIN | <file_name> | This is what file you have the main function in. Note that this is just the filename, not the actual path to it! |
 | INCLUDE | <path_to_directory> | This is where you can define directories of files you want included in your available headers of your project. If you have third party vendors, define those here! |
@@ -48,3 +49,9 @@ LINK GLU
 LIB vendor/raylib/lib
 SOURCE vendor/EasyC/include
 ```
+
+You can also add in the `-p` or -`prod` flag to optimize your build, and define a `PROD` definition in your code!
+
+## OUTPUT
+
+Tiny compiles your executable into a build/program.exe file. So once your build completes, run it from there. Happy building!
