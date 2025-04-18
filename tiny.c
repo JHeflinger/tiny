@@ -703,7 +703,11 @@ int main(int argc, char* argv[]) {
 	compile_vendors();
 	calculate_dependencies();
 	compile_objects();
-	compile_executable();	
+	if (!s_sources_up_to_date) {
+		compile_executable();
+	} else {
+		print("Current build is \033[32mup to date\033[0m, no need to build executable");
+	}
 	pathlist_delete(s_sources);
 	pathlist_delete(s_includes);
 	pathlist_delete(s_links);
