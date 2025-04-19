@@ -703,7 +703,7 @@ int main(int argc, char* argv[]) {
 	compile_vendors();
 	calculate_dependencies();
 	compile_objects();
-	if (!s_sources_up_to_date) {
+	if (!s_sources_up_to_date || !fexists("build/bin.exe")) {
 		compile_executable();
 	} else {
 		print("Current build is \033[32mup to date\033[0m, no need to build executable");
