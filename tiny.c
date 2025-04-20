@@ -1,3 +1,11 @@
+/*
+* author: Jason Heflinger
+* description: Tiny GCC project manager
+*/
+#define VERSION 1
+#define MAJOR_RELEASE 0
+#define MINOR_RELEASE 0
+
 #include <stdio.h>
 #include <time.h>
 #include <string.h>
@@ -202,6 +210,7 @@ char s_project_directory[PATHLEN];
 char s_main_file_name[PATHLEN];
 int s_found_main = 0;
 int s_sources_up_to_date = 1;
+int s_main_up_to_date = 1;
 char s_main_file_path[PATHLEN] = { 0 };
 char s_cwd[PATHLEN] = { 0 };
 PathList* s_includes = NULL;
@@ -390,6 +399,8 @@ void compile_source(const char* file) {
 			break;
 		}
 	}
+	char destination[PATHLEN] = { 0 };
+	snprintf(destination, PATHLEN, "build/cache/%s", file);
 	if (strcmp(file + basename_ptr, s_main_file_name) == 0) {
 		if (s_found_main) {
 			print("\033[31mError\033[0m: another main file detected: %s", file);
@@ -397,9 +408,11 @@ void compile_source(const char* file) {
 		}
 		s_found_main = 1;
 		strcpy(s_main_file_path, file);
+		if (!fexists(destination) || !filecmp(destination, file)) {
+			copyfile(file, destination);
+			s_main_up_to_date = 0;
+		}
 	} else {
-		char destination[PATHLEN] = { 0 };
-		snprintf(destination, PATHLEN, "build/cache/%s", file);
 		if (fexists(destination)) {	
 			FILE* fp = fopen(file, "r");
 			if (!fp) crash("Unable to open file \"%s\"", file);
@@ -507,6 +520,12 @@ void initialize(int argc, char* argv[]) {
 			}
 		}
 		fclose(file);
+	}
+
+	// ensure project directory exists
+	if (!dexists(s_project_directory)) {
+		print("\033[31mError\033[0m: Project directory \"%s/\" does not exist - if this is not your desired location, please specify a different one in \".tinyconf\"", s_project_directory);
+		exit(1);
 	}
 
 	// set up build directories
@@ -698,12 +717,16 @@ void compile_executable() {
 }
 
 int main(int argc, char* argv[]) {
+	if (argc == 2 && strcmp(argv[1], "-v") == 0) {
+		print("TINY BUILDER \033[32mv%d.%d.%d\033[0m authored by Jason Heflinger (https://github.com/JHeflinger)", VERSION, MAJOR_RELEASE, MINOR_RELEASE);
+		return 0;
+	}
 	initialize(argc, argv);
 	add_vendors();
 	compile_vendors();
 	calculate_dependencies();
 	compile_objects();
-	if (!s_sources_up_to_date || !fexists("build/bin.exe")) {
+	if (!s_sources_up_to_date || !fexists("build/bin.exe") || !s_main_up_to_date) {
 		compile_executable();
 	} else {
 		print("Current build is \033[32mup to date\033[0m, no need to build executable");
