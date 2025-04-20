@@ -197,6 +197,7 @@ typedef void (*FileHandler)(const char*);
 typedef enum {
 	NONE = 0,
 	PROD = 1 << 0,
+	AUDIT = 1 << 1,
 } BuildFlags;
 
 typedef struct {
@@ -211,6 +212,7 @@ char s_main_file_name[PATHLEN];
 int s_found_main = 0;
 int s_sources_up_to_date = 1;
 int s_main_up_to_date = 1;
+int s_vulnerabilities = 0;
 char s_main_file_path[PATHLEN] = { 0 };
 char s_cwd[PATHLEN] = { 0 };
 PathList* s_includes = NULL;
@@ -220,8 +222,174 @@ PathList* s_sources = NULL;
 PathList* s_objects = NULL;
 PathList* s_changed_headers = NULL;
 
-void copyfile(const char *src, const char *dst) {
-    FILE *srcFile = fopen(src, "rb");
+int functionline(const char* line) {
+	int sfound = 0;
+	int typefound = 0;
+	int p1found = 0;
+	int p2found = 0;
+	int i = 0;
+	while (1) {
+		if (line[i] == '\0') return 0;
+		if (!sfound && line[i] != ' ') sfound = 1;
+		if (sfound && !typefound && line[i] == ' ') typefound = 1;
+		else if (typefound && line[i] == '(' && !p1found) p1found = 1;
+		else if (p1found && line[i] == '(') return 0;
+		else if (p1found && line[i] == ')') p2found = 1;
+		else if (p2found && line[i] == ';') return 1;
+		else if (p2found) return 0;
+		i++;
+	}
+	return 0;
+}
+
+void syntax_audit(const char* file) {
+	int slen = strlen(file);
+	int header = (slen > 2 && (file[slen - 1] == 'h' && file[slen - 2] == '.'));
+	int source = (slen > 2 && (file[slen - 1] == 'c' && file[slen - 2] == '.'));
+	if (!header && !source) {
+		print("Detected abnormal file type in project: \"%s\"", file);
+		s_vulnerabilities++;
+		return;
+	}
+	int basename_ptr = 0;
+	for (int i = slen; i > 0; i--) {
+		if (file[i] == '/' || file[i] == '\\') {
+			basename_ptr = i + 1;
+			break;
+		}
+	}
+	FILE* fp = fopen(file, "r");
+	if (!fp) crash("Failed to open file");
+	char line[PATHLEN * 2] = { 0 };
+	int linecount = 0;
+	int prev_empty = 0;
+	int header_closed = 0;
+	while (fgets(line, sizeof(line), fp)) {
+		linecount++;
+		int linelen = strlen(line);
+		if (linelen >= PATHLEN) {
+			print("Detected excessively long line in \"%s\" on line %d", file, linecount);
+			s_vulnerabilities++;
+		}
+		int empty_line = 1;
+		for (int i = 0; i < linelen; i++) {
+			if (line[i] != '\n' && line[i] != ' ' && line[i] != '\t' && line[i] != '\r') {
+				empty_line = 0;
+				break;
+			}
+		}
+		if (empty_line && prev_empty) {
+			print("Detected excessive whitespace in \"%s\" on line %d", file, linecount);
+			s_vulnerabilities++;
+			prev_empty = 0;
+		} else if (empty_line) {
+			prev_empty = 1;
+		} else {
+			prev_empty = 0;
+		}
+		if (linecount == 1 && header) {
+			char hbuf[PATHLEN] = { 0 };
+			snprintf(hbuf, PATHLEN, "#ifndef %s", file + basename_ptr);
+			int hlen = strlen(hbuf);
+			for (int i = 8; i < hlen; i++) {
+				if (hbuf[i] >= 'a' && hbuf[i] <= 'z') hbuf[i] = hbuf[i] + ('A' - 'a');
+				else if (hbuf[i] == '.') hbuf[i] = '_';
+			}
+			char t = line[hlen];
+			line[hlen] = '\0';
+			if (strcmp(hbuf, line) != 0) {
+				print("Detected missing or incorrect header guard in \"%s\" on line %d", file, linecount);
+				s_vulnerabilities++;
+			}
+			line[hlen] = t;
+		} else if (linecount == 2 && header) {
+			char hbuf[PATHLEN] = { 0 };
+			snprintf(hbuf, PATHLEN, "#define %s", file + basename_ptr);
+			int hlen = strlen(hbuf);
+			for (int i = 8; i < hlen; i++) {
+				if (hbuf[i] >= 'a' && hbuf[i] <= 'z') hbuf[i] = hbuf[i] + ('A' - 'a');
+				else if (hbuf[i] == '.') hbuf[i] = '_';
+			}
+			char t = line[hlen];
+			line[hlen] = '\0';
+			if (strcmp(hbuf, line) != 0) {
+				print("Detected missing or incorrect header guard in \"%s\" on line %d", file, linecount);
+				s_vulnerabilities++;
+			}
+			line[hlen] = t;
+		}
+		if (header) {
+			char endbuf[7] = { 0 };
+			if (linelen >= 6) memcpy(endbuf, line, 6);
+			if (linelen >= 6 && strcmp("#endif", endbuf) == 0) header_closed = 1;
+			else if (!empty_line) header_closed = 0;
+		}
+		if (strstr(line,"malloc(") || strstr(line, "calloc(") || strstr(line, "free(")) {
+			print("Detected unmonitored memory operation in \"%s\" on line %d", file, linecount);
+			s_vulnerabilities++;
+		}
+		if (header) {
+			if (functionline(line)) {
+				char implbuf[PATHLEN] = { 0 };
+				char badimplbuf[PATHLEN] = { 0 };
+				for (int i = 0; i < PATHLEN; i++) {
+					if (line[i] == ';') {
+						implbuf[i] = ' ';
+						implbuf[i + 1] = '{';
+						implbuf[i + 2] = '\0';
+						badimplbuf[i] = '{';
+						badimplbuf[i + 1] = '\0';
+						break;
+					} else {
+						implbuf[i] = line[i];
+						badimplbuf[i] = line[i];
+					}
+				}
+				int implfound = 0;
+				int badimplfound = 0;
+				char srcfilepath[PATHLEN] = { 0 };
+				strcpy(srcfilepath, file);
+				srcfilepath[slen - 1] = 'c';
+				if (fexists(srcfilepath)) {
+					FILE* sfp = fopen(srcfilepath, "r");
+					if (!sfp) crash("Unable to open file");
+					char srcline[PATHLEN * 2] = { 0 };
+					int srclc = 0;
+					while (fgets(srcline, sizeof(srcline), sfp)) {
+						srclc++;
+						if (strstr(srcline, implbuf)) implfound = 1;
+						if (strstr(srcline, badimplbuf)) badimplfound = 1;
+					}
+					if (!implfound) {
+						if (badimplfound) {
+							print("The function implementation in \"%s\" on line %d is improperly formatted - please have a space in between the function and the curly brace.", srcfilepath, srclc);
+							s_vulnerabilities++;
+						} else {
+							print("Unable to find an implementation for the function on line %d of header \"%s\" in the corresponding source file", linecount, file);
+							s_vulnerabilities++;
+						}
+					}
+					fclose(sfp);
+				} else {
+					print("Unable to find a corresponding source for the header \"%s\"", file);
+					s_vulnerabilities++;
+				}
+			}
+		}
+	}
+	if (header && !header_closed) {
+		print("Detected missing #endif to close header guard in \"%s\"", file);
+		s_vulnerabilities++;
+	}
+	if (linecount == 0) {
+		print("Detected empty file \"%s\"", file);
+		s_vulnerabilities++;
+	}
+	fclose(fp);
+}
+
+void copyfile(const char* src, const char* dst) {
+    FILE* srcFile = fopen(src, "rb");
     if (!srcFile) {
         crash("Failed to open source file");
     }
@@ -243,9 +411,9 @@ void copyfile(const char *src, const char *dst) {
     fclose(dstFile);
 }
 
-int filecmp(const char *path1, const char *path2) {
-    FILE *f1 = fopen(path1, "rb");
-    FILE *f2 = fopen(path2, "rb");
+int filecmp(const char* path1, const char* path2) {
+    FILE* f1 = fopen(path1, "rb");
+    FILE* f2 = fopen(path2, "rb");
     if (!f1 || !f2) {
         fclose(f1);
         fclose(f2);
@@ -482,6 +650,9 @@ void initialize(int argc, char* argv[]) {
 			print("Optimizing for production build...");
 			s_flags |= PROD;
 		}
+		if (strcmp("-a", argv[i]) == 0 || strcmp("-audit", argv[i]) == 0) {
+			s_flags |= AUDIT;
+		}
 	}
 
 	// set up cwd
@@ -716,6 +887,20 @@ void compile_executable() {
 	free(libbuf);
 }
 
+void audit() {
+	print("Auditing project...")
+	uint64_t timer = mtime();
+	walkfiles(s_project_directory, syntax_audit);
+	timer = mtime() - timer;
+	int hours = (int)(timer / 3600000);
+	int minutes = (int)((timer - (hours * 3600000)) / 60000);
+	float seconds = (((float)timer) - (hours * 3600000) - (minutes * 60000)) / 1000.0f;
+	print("Finished audit in %d:%d:%.3f - detected %s%d\033[0m vulnerabilities", 
+	   hours, minutes, seconds, 
+	   s_vulnerabilities == 0 ? "\033[32m" : s_vulnerabilities <= 10 ? "\033[33m" : "\033[31m", 
+	   s_vulnerabilities);
+}
+
 int main(int argc, char* argv[]) {
 	if (argc == 2 && strcmp(argv[1], "-v") == 0) {
 		print("TINY BUILDER \033[32mv%d.%d.%d\033[0m authored by Jason Heflinger (https://github.com/JHeflinger)", VERSION, MAJOR_RELEASE, MINOR_RELEASE);
@@ -723,6 +908,7 @@ int main(int argc, char* argv[]) {
 	}
 	initialize(argc, argv);
 	add_vendors();
+	if (s_flags & AUDIT) audit();
 	compile_vendors();
 	calculate_dependencies();
 	compile_objects();

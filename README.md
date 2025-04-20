@@ -49,8 +49,13 @@ LINK GLU
 LIB vendor/raylib/lib
 SOURCE vendor/EasyC/include
 ```
+There are also some various flags you can add to customize your build process!
 
-You can also add in the `-p` or -`prod` flag to optimize your build, and define a `PROD` definition in your code!
+| Flag | Description |
+| ---- | ----------- |
+| -p | optimizes your build with -O3 and defines a PROD definition in your code |
+| -v | outputs version |
+| -a | audits project directory for vulnerabilities |
 
 ## OUTPUT
 
