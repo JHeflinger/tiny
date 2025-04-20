@@ -205,6 +205,17 @@ typedef struct {
 	void* next;
 } PathList;
 
+typedef struct {
+	char header[PATHLEN];
+	PathList* links;
+	PathList* secondaries;
+} HeaderLink;
+
+typedef struct {
+	HeaderLink* link;
+	void* next;
+} HeaderLinkList;
+
 size_t s_start_time = 0;
 BuildFlags s_flags = NONE;
 char s_project_directory[PATHLEN];
@@ -221,6 +232,130 @@ PathList* s_libs = NULL;
 PathList* s_sources = NULL;
 PathList* s_objects = NULL;
 PathList* s_changed_headers = NULL;
+HeaderLinkList* s_header_links = NULL;
+HeaderLinkList* s_source_links = NULL;
+
+void pathlist_add(PathList** list, const char* path) {
+	PathList* new = calloc(1, sizeof(PathList));
+	new->next = NULL;
+	strncpy(new->str, path, PATHLEN);
+	if (*list == NULL) {
+		*list = new;
+		return;
+	}
+	PathList* current = *list;
+	new->next = current;
+	*list = new;
+}
+
+void pathlist_delete(PathList* list) {
+	if (list == NULL) return;
+	PathList* n = (PathList*)list->next;
+	free(list);
+	pathlist_delete(n);
+}
+
+size_t pathlist_len(PathList* list) {
+	if (list == NULL) return 0;
+	return 1 + pathlist_len(list->next);
+}
+
+void pathlist_construct(PathList* list, char* output) {
+	size_t outcounter = 0;
+	PathList* curr = list;
+	while (curr != NULL) {
+		strcpy(output + outcounter, curr->str);
+		outcounter += strlen(curr->str);
+		output[outcounter] = ' ';
+		outcounter++;
+		output[outcounter] = '\0';
+		curr = (PathList*)curr->next;
+	}
+}
+
+void clean_header_links() {
+	while (s_header_links) {
+		pathlist_delete(s_header_links->link->links);
+		pathlist_delete(s_header_links->link->secondaries);
+		free(s_header_links->link);
+		HeaderLinkList* old = s_header_links;
+		s_header_links = (HeaderLinkList*)s_header_links->next;
+		free(old);
+	}
+}
+
+void clean_source_links() {
+	while (s_source_links) {
+		pathlist_delete(s_source_links->link->links);
+		pathlist_delete(s_source_links->link->secondaries);
+		free(s_source_links->link);
+		HeaderLinkList* old = s_source_links;
+		s_source_links = (HeaderLinkList*)s_source_links->next;
+		free(old);
+	}
+}
+
+int header_link_exists(const char* header) {
+	HeaderLinkList* curr = s_header_links;
+	while (curr) {
+		if (strcmp(curr->link->header, header) == 0) {
+			return 1;
+		}
+		curr = (HeaderLinkList*)curr->next;
+	}
+	return 0;
+}
+
+void add_header_link(const char* header, const char* link) {
+	HeaderLinkList* curr = s_header_links;
+	while (curr) {
+		if (strcmp(curr->link->header, header) == 0) {
+			pathlist_add(&(curr->link->links), link);
+			return;
+		}
+		curr = (HeaderLinkList*)curr->next;
+	}
+	HeaderLinkList* new = calloc(1, sizeof(HeaderLinkList));
+	new->link = calloc(1, sizeof(HeaderLink));
+	strcpy(new->link->header, header);
+	pathlist_add(&(new->link->links), link);
+	new->next = s_header_links;
+	s_header_links = new;
+}
+
+void add_source_link(const char* header, const char* link) {
+	HeaderLinkList* curr = s_source_links;
+	while (curr) {
+		if (strcmp(curr->link->header, header) == 0) {
+			pathlist_add(&(curr->link->links), link);
+			return;
+		}
+		curr = (HeaderLinkList*)curr->next;
+	}
+	HeaderLinkList* new = calloc(1, sizeof(HeaderLinkList));
+	new->link = calloc(1, sizeof(HeaderLink));
+	strcpy(new->link->header, header);
+	pathlist_add(&(new->link->links), link);
+	new->next = s_source_links;
+	s_source_links = new;
+}
+
+void add_header_secondary(const char* header, const char* link) {
+	HeaderLinkList* curr = s_header_links;
+	while (curr) {
+		if (strcmp(curr->link->header, header) == 0) {
+			pathlist_add(&(curr->link->secondaries), link);
+			return;
+		}
+		curr = (HeaderLinkList*)curr->next;
+	}
+	HeaderLinkList* new = calloc(1, sizeof(HeaderLinkList));
+	new->link = calloc(1, sizeof(HeaderLink));
+	strcpy(new->link->header, header);
+	pathlist_add(&(new->link->secondaries), link);
+	new->next = s_header_links;
+	s_header_links = new;
+}
 
 int functionline(const char* line) {
 	int sfound = 0;
@@ -376,6 +511,44 @@ void syntax_audit(const char* file) {
 				}
 			}
 		}
+		if (header) {
+			if (strstr(line, "#include")) {
+				char ibuf[PATHLEN] = { 0 };
+				int ind = 0;
+				int toggle = 0;
+				for (int i = 0; i < linelen; i++) {
+					if (line[i] == '\"' || line[i] == '<' || line[i] == '>') toggle = !toggle;
+					else if (toggle) {
+						ibuf[ind] = line[i];
+						ind++;
+						if (line[i] == '/' || line[i] == '\\') {
+							ind = 0;
+							memset(ibuf, 0, PATHLEN);
+						}
+					}
+				}
+				add_header_link(file + basename_ptr, ibuf);
+			}
+		}
+		if (source) {
+			if (strstr(line, "#include")) {
+				char ibuf[PATHLEN] = { 0 };
+				int ind = 0;
+				int toggle = 0;
+				for (int i = 0; i < linelen; i++) {
+					if (line[i] == '\"' || line[i] == '<' || line[i] == '>') toggle = !toggle;
+					else if (toggle) {
+						ibuf[ind] = line[i];
+						ind++;
+						if (line[i] == '/' || line[i] == '\\') {
+							ind = 0;
+							memset(ibuf, 0, PATHLEN);
+						}
+					}
+				}
+				add_source_link(file + basename_ptr, ibuf);
+			}
+		}
 	}
 	if (header && !header_closed) {
 		print("Detected missing #endif to close header guard in \"%s\"", file);
@@ -443,44 +616,6 @@ int filecmp(const char* path1, const char* path2) {
     fclose(f1);
     fclose(f2);
     return equal;
-}
-
-void pathlist_add(PathList** list, const char* path) {
-	PathList* new = calloc(1, sizeof(PathList));
-	new->next = NULL;
-	strncpy(new->str, path, PATHLEN);
-	if (*list == NULL) {
-		*list = new;
-		return;
-	}
-	PathList* current = *list;
-	new->next = current;
-	*list = new;
-}
-
-void pathlist_delete(PathList* list) {
-	if (list == NULL) return;
-	PathList* n = (PathList*)list->next;
-	free(list);
-	pathlist_delete(n);
-}
-
-size_t pathlist_len(PathList* list) {
-	if (list == NULL) return 0;
-	return 1 + pathlist_len(list->next);
-}
-
-void pathlist_construct(PathList* list, char* output) {
-	size_t outcounter = 0;
-	PathList* curr = list;
-	while (curr != NULL) {
-		strcpy(output + outcounter, curr->str);
-		outcounter += strlen(curr->str);
-		output[outcounter] = ' ';
-		outcounter++;
-		output[outcounter] = '\0';
-		curr = (PathList*)curr->next;
-	}
 }
 
 void affirmdir(const char* dir) {
@@ -887,10 +1022,96 @@ void compile_executable() {
 	free(libbuf);
 }
 
+void get_in_depth_headers(const char* dive_header, HeaderLinkList* update_header) {
+	HeaderLinkList* header = s_header_links;
+	while (header) {
+		if (strcmp(header->link->header, dive_header) == 0) {
+			PathList* secondary = header->link->links;
+			while (secondary) {
+				if (strcmp(secondary->str, update_header->link->header) == 0) {
+					print("\033[31mCritical error\033[0m: recursive include detected from \"%s\" in \"%s\"! Aborting build...", update_header->link->header, dive_header);
+					exit(1);
+				}
+				add_header_secondary(update_header->link->header, secondary->str);
+				if (header_link_exists(secondary->str)) {
+					get_in_depth_headers(secondary->str, update_header);
+				}
+				secondary = (PathList*)secondary->next;
+			}
+			return;
+		}
+		header = (HeaderLinkList*)header->next;
+	}
+}
+
 void audit() {
 	print("Auditing project...")
 	uint64_t timer = mtime();
 	walkfiles(s_project_directory, syntax_audit);
+
+	HeaderLinkList* header = s_header_links;
+	while (header) {
+		PathList* primary = header->link->links;
+		while (primary) {
+			if (header_link_exists(primary->str)) {
+				get_in_depth_headers(primary->str, header);
+			}
+			primary = (PathList*)primary->next;
+		}
+		header = (HeaderLinkList*)header->next;
+	}
+	header = s_header_links;
+	while (header) {
+		PathList* primary = header->link->links;
+		while (primary) {
+			PathList* secondary = header->link->secondaries;
+			while (secondary) {
+				if (strcmp(primary->str, secondary->str) == 0) {
+					if (header_link_exists(primary->str)) {
+						print("Useless include detected from \"%s\" - \"%s\" is not needed", header->link->header, primary->str);
+					} else {
+						print("Useless include detected from \"%s\" - <%s> is not needed", header->link->header, primary->str);
+					}
+					s_vulnerabilities++;
+					break;
+				}
+				secondary = (PathList*)secondary->next;
+			}
+			primary = (PathList*)primary->next;
+		}
+		header = (HeaderLinkList*)header->next;
+	}
+	HeaderLinkList* source = s_source_links;
+	while (source) {
+		char buff[PATHLEN] = { 0 };
+		strcpy(buff, source->link->header);
+		buff[strlen(source->link->header) - 1] = 'h';
+		PathList* inc = source->link->links;
+		while (inc) {
+			HeaderLinkList* curr = s_header_links;
+			while (curr) {
+				if (strcmp(curr->link->header, buff) == 0) {
+					PathList* secondary = curr->link->secondaries;
+					while (secondary) {
+						if (strcmp(inc->str, secondary->str)) {
+							if (header_link_exists(inc->str)) {
+								print("Useless include detected from \"%s\" - \"%s\" is not needed", source->link->header, inc->str);
+							} else {
+								print("Useless include detected from \"%s\" - <%s> is not needed", source->link->header, inc->str);
+							}
+							s_vulnerabilities++;
+							break;
+						}
+						secondary = (PathList*)secondary->next;
+					}
+				}
+				curr = (HeaderLinkList*)curr->next;
+			}
+			inc = (PathList*)inc->next;
+		}
+		source = (HeaderLinkList*)source->next;
+	}
+
 	timer = mtime() - timer;
 	int hours = (int)(timer / 3600000);
 	int minutes = (int)((timer - (hours * 3600000)) / 60000);
@@ -899,6 +1120,8 @@ void audit() {
 	   hours, minutes, seconds, 
 	   s_vulnerabilities == 0 ? "\033[32m" : s_vulnerabilities <= 10 ? "\033[33m" : "\033[31m", 
 	   s_vulnerabilities);
+	clean_header_links();
+	clean_source_links();
 }
 
 int main(int argc, char* argv[]) {
