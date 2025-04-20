@@ -1035,6 +1035,7 @@ void get_in_depth_headers(const char* dive_header, HeaderLinkList* update_header
 				add_header_secondary(update_header->link->header, secondary->str);
 				if (header_link_exists(secondary->str)) {
 					get_in_depth_headers(secondary->str, update_header);
+					return;
 				}
 				secondary = (PathList*)secondary->next;
 			}
@@ -1093,7 +1094,7 @@ void audit() {
 				if (strcmp(curr->link->header, buff) == 0) {
 					PathList* secondary = curr->link->secondaries;
 					while (secondary) {
-						if (strcmp(inc->str, secondary->str)) {
+						if (strcmp(inc->str, secondary->str) == 0) {
 							if (header_link_exists(inc->str)) {
 								print("Useless include detected from \"%s\" - \"%s\" is not needed", source->link->header, inc->str);
 							} else {
