@@ -86,7 +86,7 @@ typedef void (*FileHandler)(const char*);
 		gettimeofday(&tv, NULL);
 		return (uint64_t)(tv.tv_sec) * 1000 + (tv.tv_usec) / 1000;
 	}
-#elifdef __WIN32
+#elif __WIN32
 	#define WIN32_LEAN_AND_MEAN
 	#define NOGDICAPMASKS     // CC_*, LC_*, PC_*, CP_*, TC_*, RC_
 	#define NOVIRTUALKEYCODES // VK_*
@@ -148,7 +148,7 @@ typedef void (*FileHandler)(const char*);
 		return (statbuf.st_mode & _S_IFDIR) == 0;
 	}
 
-	void walkdir(const char* path) {
+	void walkdir(const char* path, FileHandler func) {
 		char search_path[MAX_PATH];
 		snprintf(search_path, MAX_PATH, "%s/*", path);
 		WIN32_FIND_DATAA find_data;
@@ -167,7 +167,7 @@ typedef void (*FileHandler)(const char*);
 		FindClose(hFind);
 	}
 
-	void walkfiles(const char* path) {
+	void walkfiles(const char* path, FileHandler func) {
 		char search_path[MAX_PATH];
 		snprintf(search_path, MAX_PATH, "%s/*", path);
 		WIN32_FIND_DATAA find_data;
@@ -875,6 +875,37 @@ void add_vendors() {
 				precursor[i] = line[i];
 			}
 		}
+		#ifdef __WIN32
+			if (strcmp(precursor, "LINUX") == 0) {
+				continue;
+			}
+			if (strcmp(precursor, "WINDOWS") == 0) {
+				for (size_t i = postcursor; i < strlen(line); i++) {
+					if (line[i] == ' ') {
+						precursor[i - postcursor] = '\0';
+						postcursor = i + 1;
+						break;
+					} else {
+						precursor[i - postcursor] = line[i];
+					}
+				}
+			}
+		#elif __linux__
+			if (strcmp(precursor, "WINDOWS") == 0) {
+				continue;
+			}
+			if (strcmp(precursor, "LINUX") == 0) {
+				for (size_t i = postcursor; i < strlen(line); i++) {
+					if (line[i] == ' ') {
+						precursor[i - postcursor] = '\0';
+						postcursor = i + 1;
+						break;
+					} else {
+						precursor[i - postcursor] = line[i];
+					}
+				}
+			}
+		#endif
 		if (strcmp(precursor, "INCLUDE") == 0) {
 			snprintf(workbuffer, PATHLEN, "-I\"%s\"", line + postcursor);
 			pathlist_add(&s_includes, workbuffer);

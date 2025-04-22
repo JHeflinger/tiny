@@ -34,19 +34,27 @@ To configure Tiny to be a bit more accustomed to your use, make a `.tinyconf` fi
 | LIB | <path_to_directory> | If you have libraries that you want to link that aren't on your path, enter the path to those libraries here! |
 | SOURCE | <path_to_directory_or_file> | Here you can define outside sources to include into your project. If you have third party vendors with `.c` files, include those here! You can provide the path to a singular file, or a directory of sources, whichever works best for you! |
 
-Some example content of what a `.tinyconf` can look like can look like the following:
+Additionally, you can also preface each configuration line with an operating system to use it exclusively on that operating system build! Currently only `WINDOWS` and `LINUX` are supported,
+as there are only builds for those respective operating systems available. Some example usage of this feature may look like the following:
+
+```
+WINDOWS INCLUDE vendor/windows/lib/include
+LINUX INCLUDE vendor/linux/lib/include
+```
+
+Some overall example content of what a `.tinyconf` can look like can look like the following:
 
 ```
 PROJECT src
 MAIN main.c
 INCLUDE vendor/raylib/include
 INCLUDE vendor/EasyC/include
-LINK :linux_amdx64_libraylib.a
+LINUX LINK :linux_amdx64_libraylib.a
 LINK m
 LINK pthread
 LINK GL
 LINK GLU
-LIB vendor/raylib/lib
+LINUX LIB vendor/raylib/lib
 SOURCE vendor/EasyC/include
 ```
 There are also some various flags you can add to customize your build process!
