@@ -4,7 +4,7 @@
 */
 #define VERSION 1
 #define MAJOR_RELEASE 0
-#define MINOR_RELEASE 0
+#define MINOR_RELEASE 1
 
 #include <stdio.h>
 #include <time.h>
@@ -569,7 +569,7 @@ void copyfile(const char* src, const char* dst) {
     FILE *dstFile = fopen(dst, "wb");
     if (!dstFile) {
         fclose(srcFile);
-        crash("Failed to open destination file");
+        crash("Failed to open destination file \"%s\"", dst);
     }
     char buffer[4096];
     size_t bytes;
@@ -998,6 +998,23 @@ void calculate_dependencies() {
 void compile_objects() {
 	print("Compiling sources...");
 	uint64_t timer = mtime();
+	if (fexists(s_main_file_name)) {
+		char destination[PATHLEN] = { 0 };
+		int basename_ptr = 0;
+		for (int i = strlen(s_main_file_name); i > 0; i--) {
+			if (s_main_file_name[i] == '/' || s_main_file_name[i] == '\\') {
+				basename_ptr = i + 1;
+				break;
+			}
+		}
+		snprintf(destination, PATHLEN, "build/cache/%s", s_main_file_name + basename_ptr);
+		strcpy(s_main_file_path, s_main_file_name);
+		s_found_main = 1;
+		if (!fexists(destination) || !filecmp(destination, s_main_file_name)) {
+			copyfile(s_main_file_name, destination);
+			s_main_up_to_date = 0;
+		}
+	}
 	walkfiles(s_project_directory, compile_source);
 	if (s_sources_up_to_date) {
 		print("\033[1A\033[0KSources are currently \033[32mup to date\033[0m");
