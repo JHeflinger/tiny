@@ -1,3 +1,9 @@
+<h1 align="center">
+    <picture>
+      <img height="300px" style="margin: 0; padding: 0" src="logo.png">
+    </picture>
+</h1>
+
 [TINY BUILDER](https://github.com/JHeflinger/tiny) - A tiny builder for MinGW C projects
 =======================================================
 
