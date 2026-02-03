@@ -1023,7 +1023,7 @@ void compile_objects() {
 		int hours = (int)(timer / 3600000);
 		int minutes = (int)((timer - (hours * 3600000)) / 60000);
 		float seconds = (((float)timer) - (hours * 3600000) - (minutes * 60000)) / 1000.0f;
-		print("\033[32mFinished\033[0m compiling vendors in %d:%d:%.3f", hours, minutes, seconds);
+		print("\033[32mFinished\033[0m compiling sources in %d:%d:%.3f", hours, minutes, seconds);
 	}
 	if (!s_found_main) {
 		print("\033[31mError\033[0m: unable to compile without a detected \"%s\" file", s_main_file_name);

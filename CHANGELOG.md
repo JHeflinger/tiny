@@ -1,6 +1,12 @@
 # Change Log
 All notable changes to this project will be documented in this file as of Tiny v1.0
 
+## Tiny 1.0.2
+
+### Fixed
+
+- Fixed typo saying vendors were compiled instead of sources
+
 ## Tiny [1.0.1]
 
 ### Added
