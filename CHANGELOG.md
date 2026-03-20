@@ -1,6 +1,12 @@
 # Change Log
 All notable changes to this project will be documented in this file as of Tiny v1.0
 
+## Tiny 1.1.1
+
+### Added
+
+- prod builds now do LTO (Link Time Optimization)
+
 ## Tiny 1.1.0
 
 ### Fixed

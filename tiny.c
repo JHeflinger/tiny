@@ -4,7 +4,7 @@
 */
 #define VERSION 1
 #define MAJOR_RELEASE 1
-#define MINOR_RELEASE 0
+#define MINOR_RELEASE 1
 
 #include <stdio.h>
 #include <time.h>
@@ -861,7 +861,7 @@ void compile_source(const char* file) {
 			libbuf,
 			linkbuf,
 			destination,
-			s_flags & PROD ? "-O3 -DPROD_BUILD" : "");
+			s_flags & PROD ? "-O3 -flto -DPROD_BUILD" : "");
 		if (!fexists(destination) || !filecmp(file, destination)) {
 			s_sources_up_to_date = 0;
             if (s_flags & FAST) {
