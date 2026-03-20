@@ -41,6 +41,7 @@ To configure Tiny to be a bit more accustomed to your use, make a `.tinyconf` fi
 | LINK | <link_argument> | This is where you can define what you want to link into your program, such as OpenGL or pthreads |
 | LIB | <path_to_directory> | If you have libraries that you want to link that aren't on your path, enter the path to those libraries here! |
 | SOURCE | <path_to_directory_or_file> | Here you can define outside sources to include into your project. If you have third party vendors with `.c` files, include those here! You can provide the path to a singular file, or a directory of sources, whichever works best for you! |
+| FLAG | <flag> | Here you can add one of the flags later mentioned to configure your build |
 
 Additionally, you can also preface each configuration line with an operating system to use it exclusively on that operating system build! Currently only `WINDOWS` and `LINUX` are supported,
 as there are only builds for those respective operating systems available. Some example usage of this feature may look like the following:

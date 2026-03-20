@@ -4,7 +4,7 @@
 */
 #define VERSION 1
 #define MAJOR_RELEASE 1
-#define MINOR_RELEASE 0
+#define MINOR_RELEASE 1
 
 #include <stdio.h>
 #include <time.h>
@@ -911,29 +911,33 @@ void compile_source(const char* file) {
 	}
 }
 
+void parseflag(char* flag) {
+    if (strcmp("-v", flag) == 0 || strcmp("-version", flag) == 0) {
+	    print("TINY BUILDER \033[32mv%d.%d.%d\033[0m authored by Jason Heflinger (https://github.com/JHeflinger)", VERSION, MAJOR_RELEASE, MINOR_RELEASE);
+        exit(0);
+    } else if (strcmp("-p", flag) == 0 || strcmp("-prod", flag) == 0) {
+		print("Optimizing for production build...");
+		s_flags |= PROD;
+	} else if (strcmp("-a", flag) == 0 || strcmp("-audit", flag) == 0) {
+		s_flags |= AUDIT;
+	} else if (strcmp("-f", flag) == 0 || strcmp("-fast", flag) == 0) {
+        print("Enabling multi-threaded building over %d cores...", threadcount());
+		s_threads = calloc(threadcount(), sizeof(TINY_THREAD));
+        s_active_threads = calloc(threadcount(), sizeof(int));
+        TINY_CREATE_MUTEX(s_mutex);
+        s_flags |= FAST;
+	} else {
+        crash("Unknown flag \"%s\" detected", flag);
+    }
+}
+
 void initialize(int argc, char* argv[]) {
 	// initialize timer
 	s_start_time = mtime();
 
 	// parse flags
 	for (int i = 1; i < argc; i++) {
-		if (strcmp("-v", argv[i]) == 0 || strcmp("-version", argv[i]) == 0) {
-		    print("TINY BUILDER \033[32mv%d.%d.%d\033[0m authored by Jason Heflinger (https://github.com/JHeflinger)", VERSION, MAJOR_RELEASE, MINOR_RELEASE);
-            exit(0);
-		} else if (strcmp("-p", argv[i]) == 0 || strcmp("-prod", argv[i]) == 0) {
-			print("Optimizing for production build...");
-			s_flags |= PROD;
-		} else if (strcmp("-a", argv[i]) == 0 || strcmp("-audit", argv[i]) == 0) {
-			s_flags |= AUDIT;
-		} else if (strcmp("-f", argv[i]) == 0 || strcmp("-fast", argv[i]) == 0) {
-            print("Enabling multi-threaded building over %d cores...", threadcount());
-			s_threads = calloc(threadcount(), sizeof(TINY_THREAD));
-            s_active_threads = calloc(threadcount(), sizeof(int));
-            TINY_CREATE_MUTEX(s_mutex);
-            s_flags |= FAST;
-		} else {
-            crash("Unknown flag \"%s\" detected", argv[i]);
-        }
+		parseflag(argv[i]);
 	}
 
 	// set up cwd
@@ -1071,6 +1075,10 @@ void add_vendors() {
 			} else {
 				pathlist_add(&s_sources, line + postcursor);
 			}
+        }else if (strcmp(precursor, "FLAG") == 0) {
+            char b[PATHLEN] = { 0 };
+            sprintf(b, "-%s", line + postcursor);
+            parseflag(b);
 		} else if (strcmp(precursor, "PROJECT") != 0 && strcmp(precursor, "MAIN") != 0) {
 			warn("Unknown precursor \"%s\" detected on line %d of \".tinyconf\" - skipping", precursor, linecount);
 		}

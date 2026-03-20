@@ -1,6 +1,12 @@
 # Change Log
 All notable changes to this project will be documented in this file as of Tiny v1.0
 
+## Tiny 1.1.1
+
+### Added
+
+- FLAG .tinyconf arg can now add arguments
+
 ## Tiny 1.1.0
 
 ### Fixed
