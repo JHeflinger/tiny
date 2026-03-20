@@ -65,8 +65,11 @@ LINK GL
 LINK GLU
 LINUX LIB vendor/raylib/lib
 SOURCE vendor/EasyC/include
+FLAG audit
+FLAG fast
 ```
-There are also some various flags you can add to customize your build process!
+
+There are also some various flags you can add to customize your build process! You can also use =<bool> to specify enabling/disabling a flag (e.g. `tiny -f=false`). Note that command line args will override the .tinyconf flags if specified.
 
 | Flag | Description |
 | ---- | ----------- |

@@ -4,7 +4,7 @@
 */
 #define VERSION 1
 #define MAJOR_RELEASE 1
-#define MINOR_RELEASE 1
+#define MINOR_RELEASE 2
 
 #include <stdio.h>
 #include <time.h>
@@ -283,6 +283,7 @@ typedef struct {
 
 size_t s_start_time = 0;
 BuildFlags s_flags = NONE;
+BuildFlags s_unflags = NONE;
 char s_project_directory[PATHLEN];
 char s_main_file_name[PATHLEN];
 int s_found_main = 0;
@@ -911,23 +912,56 @@ void compile_source(const char* file) {
 	}
 }
 
-void parseflag(char* flag) {
-    if (strcmp("-v", flag) == 0 || strcmp("-version", flag) == 0) {
-	    print("TINY BUILDER \033[32mv%d.%d.%d\033[0m authored by Jason Heflinger (https://github.com/JHeflinger)", VERSION, MAJOR_RELEASE, MINOR_RELEASE);
-        exit(0);
-    } else if (strcmp("-p", flag) == 0 || strcmp("-prod", flag) == 0) {
-		print("Optimizing for production build...");
-		s_flags |= PROD;
-	} else if (strcmp("-a", flag) == 0 || strcmp("-audit", flag) == 0) {
-		s_flags |= AUDIT;
-	} else if (strcmp("-f", flag) == 0 || strcmp("-fast", flag) == 0) {
-        print("Enabling multi-threaded building over %d cores...", threadcount());
-		s_threads = calloc(threadcount(), sizeof(TINY_THREAD));
-        s_active_threads = calloc(threadcount(), sizeof(int));
-        TINY_CREATE_MUTEX(s_mutex);
-        s_flags |= FAST;
+void parseflag(char* flag, int blacklistable) {
+    char buffer[PATHLEN] = { 0 };
+    int whitelist = 1;
+    if (blacklistable) {
+        for (size_t i = 0; i < strlen(flag); i++) {
+            if (flag[i] == '=') {
+                if (strcmp(flag + i + 1, "true") == 0 || strcmp(flag + i + 1, "TRUE") == 0) {
+                    whitelist = 1;
+                } else if (strcmp(flag + i + 1, "false") == 0 || strcmp(flag + i + 1, "FALSE") == 0) {
+                    whitelist = 0;
+                } else {
+                    crash("Unknown equal argument in flag \"%s\" - \"%s\"", flag, flag + i + 1);
+                }
+                break;
+            }
+            buffer[i] = flag[i];
+        }
+    } else {
+        strcpy(buffer, flag);
+    }
+    if (strcmp("-v", buffer) == 0 || strcmp("-version", buffer) == 0) {
+        if (whitelist) {
+	        print("TINY BUILDER \033[32mv%d.%d.%d\033[0m authored by Jason Heflinger (https://github.com/JHeflinger)", VERSION, MAJOR_RELEASE, MINOR_RELEASE);
+            exit(0);
+        }
+    } else if (strcmp("-p", buffer) == 0 || strcmp("-prod", buffer) == 0) {
+        if (whitelist && !(s_unflags & PROD)) {
+		    print("Optimizing for production build...");
+		    s_flags |= PROD;
+        } else {
+            s_unflags |= PROD;
+        }
+	} else if (strcmp("-a", buffer) == 0 || strcmp("-audit", buffer) == 0) {
+		if (whitelist && !(s_unflags & AUDIT)) {
+            s_flags |= AUDIT;
+        } else {
+            s_unflags |= AUDIT;
+        }
+	} else if (strcmp("-f", buffer) == 0 || strcmp("-fast", buffer) == 0) {
+        if (whitelist && !(s_unflags & FAST)) {
+            print("Enabling multi-threaded building over %d cores...", threadcount());
+		    s_threads = calloc(threadcount(), sizeof(TINY_THREAD));
+            s_active_threads = calloc(threadcount(), sizeof(int));
+            TINY_CREATE_MUTEX(s_mutex);
+            s_flags |= FAST;
+        } else {
+            s_unflags |= FAST;
+        }
 	} else {
-        crash("Unknown flag \"%s\" detected", flag);
+        crash("Unknown flag \"%s\" detected", buffer);
     }
 }
 
@@ -937,7 +971,7 @@ void initialize(int argc, char* argv[]) {
 
 	// parse flags
 	for (int i = 1; i < argc; i++) {
-		parseflag(argv[i]);
+		parseflag(argv[i], 1);
 	}
 
 	// set up cwd
@@ -1071,14 +1105,14 @@ void add_vendors() {
 			pathlist_add(&s_libs, workbuffer);
 		} else if (strcmp(precursor, "SOURCE") == 0) {
 			if (dexists(line + postcursor)) {
-				walkfiles(line + postcursor, add_to_sources);	
+				walkfiles(line + postcursor, add_to_sources);
 			} else {
 				pathlist_add(&s_sources, line + postcursor);
 			}
         }else if (strcmp(precursor, "FLAG") == 0) {
             char b[PATHLEN] = { 0 };
             sprintf(b, "-%s", line + postcursor);
-            parseflag(b);
+            parseflag(b, 0);
 		} else if (strcmp(precursor, "PROJECT") != 0 && strcmp(precursor, "MAIN") != 0) {
 			warn("Unknown precursor \"%s\" detected on line %d of \".tinyconf\" - skipping", precursor, linecount);
 		}

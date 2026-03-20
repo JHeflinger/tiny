@@ -1,6 +1,12 @@
 # Change Log
 All notable changes to this project will be documented in this file as of Tiny v1.0
 
+## Tiny 1.1.2
+
+### Added
+
+- command line args can now append =TRUE/FALSE to override true or false flags
+
 ## Tiny 1.1.1
 
 ### Added
