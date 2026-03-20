@@ -4,7 +4,7 @@
 */
 #define VERSION 1
 #define MAJOR_RELEASE 1
-#define MINOR_RELEASE 1
+#define MINOR_RELEASE 0
 
 #include <stdio.h>
 #include <time.h>
@@ -791,9 +791,6 @@ void async_compile(void* params) {
         exit(1);
     }
     TINY_LOCK_MUTEX(s_mutex);
-	char finalbuf[PATHLEN + 2] = { 0 };
-	snprintf(finalbuf, PATHLEN + 2, "%s.o", tp->destination);
-	pathlist_add(&s_objects, finalbuf);
     s_active_threads[tp->index] = 2;
     TINY_RELEASE_MUTEX(s_mutex);
     free(tp->command);
@@ -903,11 +900,11 @@ void compile_source(const char* file) {
 				    exit(1);
 			    }
                 free(commandbuf);
-		        char finalbuf[PATHLEN + 2] = { 0 };
-		        snprintf(finalbuf, PATHLEN + 2, "%s.o", destination);
-		        pathlist_add(&s_objects, finalbuf);
             }
 		}
+		char finalbuf[PATHLEN + 2] = { 0 };
+		snprintf(finalbuf, PATHLEN + 2, "%s.o", destination);
+		pathlist_add(&s_objects, finalbuf);
 		free(incbuf);
 		free(linkbuf);
 		free(libbuf);
