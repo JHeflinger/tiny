@@ -3,8 +3,8 @@
 * description: Tiny GCC project manager
 */
 #define VERSION 1
-#define MAJOR_RELEASE 0
-#define MINOR_RELEASE 1
+#define MAJOR_RELEASE 1
+#define MINOR_RELEASE 0
 
 #include <stdio.h>
 #include <time.h>
@@ -14,7 +14,7 @@
 #include <stdint.h>
 
 #define print(...) {printf(__VA_ARGS__);printf("\n");}
-#define crash(...) {printf("\033[31m[CRITICAL FAILURE]\033[0m "); print(__VA_ARGS__);exit(1);}
+#define crash(...) {printf("\033[31m[ERROR]\033[0m "); print(__VA_ARGS__);exit(1);}
 #define warn(...) {printf("\033[33m[WARNING]\033[0m "); print(__VA_ARGS__);}
 #define PATHLEN 4096
 
@@ -24,9 +24,30 @@ typedef void (*FileHandler)(const char*);
 	#include <unistd.h>
 	#include <dirent.h>
 	#include <sys/time.h>
+    #include <pthread.h>
 
 	#define cwd(buffer) getcwd(buffer, sizeof(buffer))
 	#define makedir(dir) (!mkdir(dir, 0755))
+
+    typedef pthread_t TINY_THREAD;
+    typedef pthread_mutex_t TINY_MUTEX;
+    typedef pthread_cond_t TINY_COND;
+
+    #define TINY_THREAD_RETURN_TYPE void*
+    #define TINY_THREAD_PARAMETER_TYPE void*
+    #define TINY_CREATE_THREAD(thread, func, parameters) pthread_create(&thread, NULL, (void* (*)(void*))func, parameters)
+    #define TINY_WAIT_THREAD(thread) pthread_join(thread, NULL)
+    #define TINY_CREATE_MUTEX(mutex) pthread_mutex_init(&mutex, NULL);
+    #define TINY_LOCK_MUTEX(mutex) pthread_mutex_lock(&mutex)
+    #define TINY_RELEASE_MUTEX(mutex) pthread_mutex_unlock(&mutex)
+    #define TINY_CREATE_COND(cond) pthread_cond_init(&cond, NULL);
+    #define TINY_WAIT_COND(cond, mutex) pthread_cond_wait(&cond, &mutex)
+    #define TINY_SIGNAL_COND(cond) pthread_cond_signal(&cond)
+    #define TINY_BROADCAST_COND(cond) pthread_cond_broadcast(&cond)
+
+    int threadcount() {
+        return (int)sysconf(_SC_NPROCESSORS_ONLN);
+    }
 
 	int dexists(const char* dir) {
 		struct stat statbuf;
@@ -46,14 +67,18 @@ typedef void (*FileHandler)(const char*);
 
 	void walkdir(const char* path, FileHandler func) {
 		DIR *dir = opendir(path);
-		if (!dir) crash("Unable to open directory \"%s\"", path);
+		if (!dir) {
+            crash("Unable to open directory \"%s\"", path);
+        }
 		struct dirent *entry;
 		while ((entry = readdir(dir)) != NULL) {
 			if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
 			char full_path[PATH_MAX];
 			snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
 	        struct stat statbuf;
-			if (stat(full_path, &statbuf) != 0) crash("Stat call failed");
+			if (stat(full_path, &statbuf) != 0) {
+                crash("Stat call failed");
+            }
 			if (S_ISDIR(statbuf.st_mode)) {
 				func(full_path);
 				walkdir(full_path, func);
@@ -64,14 +89,18 @@ typedef void (*FileHandler)(const char*);
 
 	void walkfiles(const char* path, FileHandler func) {
 		DIR *dir = opendir(path);
-		if (!dir) crash("Unable to open directory \"%s\"", path);
+		if (!dir) {
+            crash("Unable to open directory \"%s\"", path);
+        }
 		struct dirent *entry;
 		while ((entry = readdir(dir)) != NULL) {
 			if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
 			char full_path[PATH_MAX];
 			snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
 	        struct stat statbuf;
-			if (stat(full_path, &statbuf) != 0) crash("Stat call failed");
+			if (stat(full_path, &statbuf) != 0) {
+                crash("Stat call failed");
+            }
 			if (!S_ISDIR(statbuf.st_mode)) {
 				func(full_path);
 			} else {
@@ -132,6 +161,28 @@ typedef void (*FileHandler)(const char*);
 	#define cwd(buffer) _getcwd(buffer, sizeof(buffer))
 	#define makedir(dir) (!_mkdir(dir))
 
+    typedef HANDLE TINY_THREAD;
+    typedef CRITICAL_SECTION TINY_MUTEX;
+    typedef CONDITION_VARIABLE TINY_COND;
+
+    #define TINY_THREAD_RETURN_TYPE DWORD WINAPI
+    #define TINY_THREAD_PARAMETER_TYPE LPVOID
+    #define TINY_CREATE_THREAD(thread, func, parameters) { thread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)func, (LPVOID)parameters, 0, NULL); }
+    #define TINY_WAIT_THREAD(thread) {WaitForSingleObject(thread, INFINITE); CloseHandle(thread);}
+    #define TINY_CREATE_MUTEX(mutex) InitializeCriticalSection(&mutex);
+    #define TINY_LOCK_MUTEX(mutex) EnterCriticalSection(&mutex)
+    #define TINY_RELEASE_MUTEX(mutex) LeaveCriticalSection(&mutex)
+    #define TINY_CREATE_COND(cond) InitializeConditionVariable(&cond);
+    #define TINY_WAIT_COND(cond, mutex) SleepConditionVariableCS(&cond, &mutex, INFINITE);
+    #define TINY_SIGNAL_COND(cond) WakeConditionVariable(&cond)
+    #define TINY_BROADCAST_COND(cond) WakeAllConditionVariable(&cond)
+
+    int threadcount() {
+        SYSTEM_INFO sysinfo;
+        GetSystemInfo(&sysinfo);
+        return (int)sysinfo.dwNumberOfProcessors;
+    }
+
 	int dexists(const char* dir) {
 		struct _stat statbuf;
 		if (_stat(dir, &statbuf) != 0) {
@@ -153,7 +204,9 @@ typedef void (*FileHandler)(const char*);
 		snprintf(search_path, MAX_PATH, "%s/*", path);
 		WIN32_FIND_DATAA find_data;
 		HANDLE hFind = FindFirstFileA(search_path, &find_data);
-		if (hFind == INVALID_HANDLE_VALUE) crash("Unable to open directory \"%s\"", path);
+		if (hFind == INVALID_HANDLE_VALUE) {
+            crash("Unable to open directory \"%s\"", path);
+        }
 		do {
 			const char *name = find_data.cFileName;
 			if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) continue;
@@ -172,7 +225,9 @@ typedef void (*FileHandler)(const char*);
 		snprintf(search_path, MAX_PATH, "%s/*", path);
 		WIN32_FIND_DATAA find_data;
 		HANDLE hFind = FindFirstFileA(search_path, &find_data);
-		if (hFind == INVALID_HANDLE_VALUE) crash("Unable to open directory \"%s\"", path);
+		if (hFind == INVALID_HANDLE_VALUE) {
+            crash("Unable to open directory \"%s\"", path);
+        }
 		do {
 			const char *name = find_data.cFileName;
 			if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) continue;
@@ -198,6 +253,7 @@ typedef enum {
 	NONE = 0,
 	PROD = 1 << 0,
 	AUDIT = 1 << 1,
+    FAST = 1 << 2,
 } BuildFlags;
 
 typedef struct {
@@ -215,6 +271,15 @@ typedef struct {
 	HeaderLink* link;
 	void* next;
 } HeaderLinkList;
+
+typedef struct {
+    char* command;
+    char destination[PATHLEN];
+    char file[PATHLEN];
+    int index;
+    int basename_ptr;
+    int sourcei;
+} ThreadParameters;
 
 size_t s_start_time = 0;
 BuildFlags s_flags = NONE;
@@ -234,6 +299,10 @@ PathList* s_objects = NULL;
 PathList* s_changed_headers = NULL;
 HeaderLinkList* s_header_links = NULL;
 HeaderLinkList* s_source_links = NULL;
+TINY_THREAD* s_threads = NULL;
+int* s_active_threads = NULL;
+TINY_MUTEX s_mutex;
+int s_sourcei = 0;
 
 void pathlist_add(PathList** list, const char* path) {
 	PathList* new = calloc(1, sizeof(PathList));
@@ -394,7 +463,9 @@ void syntax_audit(const char* file) {
 		}
 	}
 	FILE* fp = fopen(file, "r");
-	if (!fp) crash("Failed to open file");
+	if (!fp) {
+        crash("Failed to open file");
+    }
 	char line[PATHLEN * 2] = { 0 };
 	int linecount = 0;
 	int prev_empty = 0;
@@ -487,7 +558,9 @@ void syntax_audit(const char* file) {
 				srcfilepath[slen - 1] = 'c';
 				if (fexists(srcfilepath)) {
 					FILE* sfp = fopen(srcfilepath, "r");
-					if (!sfp) crash("Unable to open file");
+					if (!sfp) {
+                        crash("Unable to open file");
+                    }
 					char srcline[PATHLEN * 2] = { 0 };
 					int srclc = 0;
 					while (fgets(srcline, sizeof(srcline), sfp)) {
@@ -590,13 +663,13 @@ int filecmp(const char* path1, const char* path2) {
     if (!f1 || !f2) {
         fclose(f1);
         fclose(f2);
-		crash("Error opening files");
+		crash("failure during opening files");
     }
     struct stat stat1, stat2;
     if (stat(path1, &stat1) != 0 || stat(path2, &stat2) != 0) {
         fclose(f1);
         fclose(f2);
-		crash("Error stating files");
+		crash("failure during stating files");
     }
     if (stat1.st_size != stat2.st_size) {
         fclose(f1);
@@ -619,8 +692,9 @@ int filecmp(const char* path1, const char* path2) {
 }
 
 void affirmdir(const char* dir) {
-	if (!dexists(dir))
-		if (!makedir(dir)) crash("Unable to affirm directory %s", dir);
+	if (!dexists(dir) && !makedir(dir)) {
+        crash("Unable to affirm directory %s", dir);
+    }
 }
 
 void affirm_to_cache(const char* dir) {
@@ -674,7 +748,9 @@ void accumulate_header(const char* file) {
 		curr = (PathList*)curr->next;
 	}
 	FILE* fp = fopen(file, "r");
-	if (!fp) crash("Unable to open file \"%s\"", file);
+	if (!fp) {
+        crash("Unable to open file \"%s\"", file);
+    }
 	char line[PATHLEN * 2] = { 0 };
 	while (fgets(line, sizeof(line), fp)) {
 		if (strstr(line, "#include") != NULL) {
@@ -692,6 +768,38 @@ void accumulate_header(const char* file) {
 	fclose(fp);
 }
 
+void async_compile_progress_update(int index, int action, const char* name) {
+    if (action == 0) {
+		print("- [%s] \033[33m(compiling...)\033[0m", name);
+    } else {
+		print("\033[%dA\033[2K- [%s] \033[32mOK\033[0m", s_sourcei - index, name);
+        printf("\033[%dB", (s_sourcei - index) - 1);
+    }
+}
+
+void async_compile(void* params) {
+    ThreadParameters* tp = (ThreadParameters*)params;
+    int result = system(tp->command);
+    if (result == 0) {
+        copyfile(tp->file, tp->destination);
+        TINY_LOCK_MUTEX(s_mutex);
+        async_compile_progress_update(tp->sourcei, 1, tp->file + tp->basename_ptr);
+        TINY_RELEASE_MUTEX(s_mutex);
+    } else {
+        TINY_LOCK_MUTEX(s_mutex);
+		print("Building source \"%s\" \033[31mfailed\033[0m", tp->file + tp->basename_ptr);
+        exit(1);
+    }
+    TINY_LOCK_MUTEX(s_mutex);
+	char finalbuf[PATHLEN + 2] = { 0 };
+	snprintf(finalbuf, PATHLEN + 2, "%s.o", tp->destination);
+	pathlist_add(&s_objects, finalbuf);
+    s_active_threads[tp->index] = 2;
+    TINY_RELEASE_MUTEX(s_mutex);
+    free(tp->command);
+    free(tp);
+}
+
 void compile_source(const char* file) {
 	size_t slen = strlen(file);
 	if (slen > 2 && (file[slen - 1] != 'c' || file[slen - 2] != '.')) return;
@@ -706,9 +814,8 @@ void compile_source(const char* file) {
 	snprintf(destination, PATHLEN, "build/cache/%s", file);
 	if (strcmp(file + basename_ptr, s_main_file_name) == 0) {
 		if (s_found_main) {
-			print("\033[31mError\033[0m: another main file detected: %s", file);
-			exit(1);
-		}
+            crash("another main file detected: %s", file);
+        }
 		s_found_main = 1;
 		strcpy(s_main_file_path, file);
 		if (!fexists(destination) || !filecmp(destination, file)) {
@@ -718,7 +825,9 @@ void compile_source(const char* file) {
 	} else {
 		if (fexists(destination)) {	
 			FILE* fp = fopen(file, "r");
-			if (!fp) crash("Unable to open file \"%s\"", file);
+			if (!fp) {
+                crash("Unable to open file \"%s\"", file);
+            }
 			char line[PATHLEN * 2] = { 0 };
 			while (fgets(line, sizeof(line), fp)) {
 				if (strstr(line, "#include") != NULL) {
@@ -755,23 +864,53 @@ void compile_source(const char* file) {
 			s_flags & PROD ? "-O3 -DPROD_BUILD" : "");
 		if (!fexists(destination) || !filecmp(file, destination)) {
 			s_sources_up_to_date = 0;
-			print("- [%s] \033[33m(compiling...)\033[0m", file + basename_ptr);
-			int result = system(commandbuf);
-			if (result == 0) {
-				print("\033[1A\033[0K- [%s] \033[32mOK\033[0m", file + basename_ptr);
-				copyfile(file, destination);
-			} else {
-				print("Building source \"%s\" \033[31mfailed\033[0m", file + basename_ptr);
-				exit(1);
-			}
+            if (s_flags & FAST) {
+                int ind = 0;
+                while (1) {
+                    TINY_LOCK_MUTEX(s_mutex);
+                    if (s_active_threads[ind] != 1) {
+                        if (s_active_threads[ind] == 2) {
+                            TINY_RELEASE_MUTEX(s_mutex);
+                            TINY_WAIT_THREAD(s_threads[ind]);
+                            TINY_LOCK_MUTEX(s_mutex);
+                        }
+                        s_active_threads[ind] = 1;
+                        ThreadParameters* tp = calloc(1, sizeof(ThreadParameters));
+                        tp->command = commandbuf;
+                        strcpy(tp->destination, destination);
+                        strcpy(tp->file, file);
+                        tp->index = ind;
+                        tp->basename_ptr = basename_ptr;
+                        tp->sourcei = s_sourcei;
+                        s_sourcei++;
+                        async_compile_progress_update(s_sourcei - 1, 0, file + basename_ptr);
+                        TINY_CREATE_THREAD(s_threads[ind], async_compile, tp);
+                        TINY_RELEASE_MUTEX(s_mutex);
+                        break;
+                    }
+                    TINY_RELEASE_MUTEX(s_mutex);
+                    ind++;
+                    if (ind >= threadcount()) ind = 0;
+                }
+            } else {
+			    print("- [%s] \033[33m(compiling...)\033[0m", file + basename_ptr);
+			    int result = system(commandbuf);
+			    if (result == 0) {
+				    print("\033[1A\033[0K- [%s] \033[32mOK\033[0m", file + basename_ptr);
+				    copyfile(file, destination);
+			    } else {
+				    print("Building source \"%s\" \033[31mfailed\033[0m", file + basename_ptr);
+				    exit(1);
+			    }
+                free(commandbuf);
+		        char finalbuf[PATHLEN + 2] = { 0 };
+		        snprintf(finalbuf, PATHLEN + 2, "%s.o", destination);
+		        pathlist_add(&s_objects, finalbuf);
+            }
 		}
-		free(commandbuf);
 		free(incbuf);
 		free(linkbuf);
 		free(libbuf);
-		char finalbuf[PATHLEN + 2] = { 0 };
-		snprintf(finalbuf, PATHLEN + 2, "%s.o", destination);
-		pathlist_add(&s_objects, finalbuf);
 	}
 }
 
@@ -781,13 +920,23 @@ void initialize(int argc, char* argv[]) {
 
 	// parse flags
 	for (int i = 1; i < argc; i++) {
-		if (strcmp("-p", argv[i]) == 0 || strcmp("-prod", argv[i]) == 0) {
+		if (strcmp("-v", argv[i]) == 0 || strcmp("-version", argv[i]) == 0) {
+		    print("TINY BUILDER \033[32mv%d.%d.%d\033[0m authored by Jason Heflinger (https://github.com/JHeflinger)", VERSION, MAJOR_RELEASE, MINOR_RELEASE);
+            exit(0);
+		} else if (strcmp("-p", argv[i]) == 0 || strcmp("-prod", argv[i]) == 0) {
 			print("Optimizing for production build...");
 			s_flags |= PROD;
-		}
-		if (strcmp("-a", argv[i]) == 0 || strcmp("-audit", argv[i]) == 0) {
+		} else if (strcmp("-a", argv[i]) == 0 || strcmp("-audit", argv[i]) == 0) {
 			s_flags |= AUDIT;
-		}
+		} else if (strcmp("-f", argv[i]) == 0 || strcmp("-fast", argv[i]) == 0) {
+            print("Enabling multi-threaded building over %d cores...", threadcount());
+			s_threads = calloc(threadcount(), sizeof(TINY_THREAD));
+            s_active_threads = calloc(threadcount(), sizeof(int));
+            TINY_CREATE_MUTEX(s_mutex);
+            s_flags |= FAST;
+		} else {
+            crash("Unknown flag \"%s\" detected", argv[i]);
+        }
 	}
 
 	// set up cwd
@@ -800,7 +949,9 @@ void initialize(int argc, char* argv[]) {
 	strcpy(s_main_file_name, "main.c");
 	if (fexists(".tinyconf")) {
 		FILE* file = fopen(".tinyconf", "r");
-		if (!file) crash("Unable to open configuration file");
+		if (!file) {
+            crash("Unable to open configuration file");
+        }
 		char line[PATHLEN * 2] = { 0 };
 		char precursor[PATHLEN] = { 0 };
 		while (fgets(line, sizeof(line), file)) {
@@ -830,9 +981,8 @@ void initialize(int argc, char* argv[]) {
 
 	// ensure project directory exists
 	if (!dexists(s_project_directory)) {
-		print("\033[31mError\033[0m: Project directory \"%s/\" does not exist - if this is not your desired location, please specify a different one in \".tinyconf\"", s_project_directory);
-		exit(1);
-	}
+		crash("Project directory \"%s/\" does not exist - if this is not your desired location, please specify a different one in \".tinyconf\"", s_project_directory);
+    }
 
 	// set up build directories
 	affirmdir("build");
@@ -853,7 +1003,9 @@ void initialize(int argc, char* argv[]) {
 void add_vendors() {
 	if (!fexists(".tinyconf")) return;
 	FILE* file = fopen(".tinyconf", "r");
-	if (!file) crash("Unable to open configuration file");
+	if (!file) {
+        crash("Unable to open configuration file");
+    }
 	char line[PATHLEN * 2] = { 0 };
 	char precursor[PATHLEN] = { 0 };
 	char workbuffer[PATHLEN] = { 0 };
@@ -875,6 +1027,7 @@ void add_vendors() {
 				precursor[i] = line[i];
 			}
 		}
+        if (strlen(line) == 0) continue;
 		#ifdef __WIN32
 			if (strcmp(precursor, "LINUX") == 0) {
 				continue;
@@ -933,7 +1086,9 @@ void compile_vendors() {
 	if (!fexists("build/vendor/vendor.o")) {
 		print("Compiling vendors...");
 		FILE* file = fopen("build/vendor/tiny_merged_vendors.c", "w");
-		if (!file) crash("Unable to consolidate vendor sources");
+		if (!file) {
+            crash("Unable to consolidate vendor sources");
+        }
 		PathList* pl = s_sources;
 		while (pl != NULL) {
 			char buffer[PATHLEN + 18] = { 0 };
@@ -1016,6 +1171,17 @@ void compile_objects() {
 		}
 	}
 	walkfiles(s_project_directory, compile_source);
+    if (s_flags & FAST) {
+        while (1) {
+            int all_done = 1;
+            for (int i = 0; i < threadcount(); i++) {
+                TINY_LOCK_MUTEX(s_mutex);
+                if (s_active_threads[i] == 1) all_done = 0;
+                TINY_RELEASE_MUTEX(s_mutex);
+            }
+            if (all_done) break;
+        }
+    }
 	if (s_sources_up_to_date) {
 		print("\033[1A\033[0KSources are currently \033[32mup to date\033[0m");
 	} else {
@@ -1026,8 +1192,7 @@ void compile_objects() {
 		print("\033[32mFinished\033[0m compiling sources in %d:%d:%.3f", hours, minutes, seconds);
 	}
 	if (!s_found_main) {
-		print("\033[31mError\033[0m: unable to compile without a detected \"%s\" file", s_main_file_name);
-		exit(1);
+		crash("unable to compile without a detected \"%s\" file", s_main_file_name);
 	}
 }
 
@@ -1174,10 +1339,6 @@ void audit() {
 }
 
 int main(int argc, char* argv[]) {
-	if (argc == 2 && strcmp(argv[1], "-v") == 0) {
-		print("TINY BUILDER \033[32mv%d.%d.%d\033[0m authored by Jason Heflinger (https://github.com/JHeflinger)", VERSION, MAJOR_RELEASE, MINOR_RELEASE);
-		return 0;
-	}
 	initialize(argc, argv);
 	add_vendors();
 	if (s_flags & AUDIT) audit();
@@ -1198,5 +1359,9 @@ int main(int argc, char* argv[]) {
 	int minutes = (int)((s_start_time - (hours * 3600000)) / 60000);
 	float seconds = (((float)s_start_time) - (hours * 3600000) - (minutes * 60000)) / 1000.0f;
 	print("\033[32mFinished\033[0m total build in %d:%d:%.3f", hours, minutes, seconds);
+    if (s_flags & FAST) {
+        free(s_threads);
+        free(s_active_threads);
+    }
 	return 0;
 }

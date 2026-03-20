@@ -25,6 +25,8 @@ All Tiny requires is gcc installed and ready to use on your path. Beyond that, y
 There is no official builder for Tiny, it's all in one singular C file! Compile that into an 
 executable however you wish! With gcc, it's as simple as `gcc tiny.c`
 
+> NOTE: As of tiny 1.1, multithreading capabilities are available! This means that if you're on linux, you'll have to link pthreads, so the compile command will be `gcc tiny.c -pthread` (Sorry for forcing you to add another whole word onto the compile command!)
+
 ## HOW TO USE
 
 Tiny works right out of the box, so you can just run it in your project's working directory! By default, it will look for a `src/` folder in your working directory, and use all the `.c` and `.h` files to compile your project, and it will look for a `main.c` file in that directory to use as the entrypoint. However, if you'd like to customize this, keep reading to learn about `.tinyconf`!!
@@ -70,6 +72,7 @@ There are also some various flags you can add to customize your build process!
 | -p | optimizes your build with -O3 and defines a PROD definition in your code |
 | -v | outputs version |
 | -a | audits project directory for vulnerabilities |
+| -f | compiles in parallel |
 
 ## OUTPUT
 
