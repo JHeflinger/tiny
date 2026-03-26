@@ -1,6 +1,12 @@
 # Change Log
 All notable changes to this project will be documented in this file as of Tiny v1.0
 
+## Tiny 1.1.3
+
+### Added
+
+- can now add compile definitions in .tinyconf via the DEFINE keyword
+
 ## Tiny 1.1.2
 
 ### Added

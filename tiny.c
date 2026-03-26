@@ -4,7 +4,7 @@
 */
 #define VERSION 1
 #define MAJOR_RELEASE 1
-#define MINOR_RELEASE 2
+#define MINOR_RELEASE 3
 
 #include <stdio.h>
 #include <time.h>
@@ -294,6 +294,7 @@ char s_main_file_path[PATHLEN] = { 0 };
 char s_cwd[PATHLEN] = { 0 };
 PathList* s_includes = NULL;
 PathList* s_links = NULL;
+PathList* s_defines = NULL;
 PathList* s_libs = NULL;
 PathList* s_sources = NULL;
 PathList* s_objects = NULL;
@@ -847,13 +848,16 @@ void compile_source(const char* file) {
 		char* incbuf = calloc(pathlist_len(s_includes), PATHLEN);
 		char* linkbuf = calloc(pathlist_len(s_links), PATHLEN);
 		char* libbuf = calloc(pathlist_len(s_libs), PATHLEN);
+        char* defbuf = calloc(pathlist_len(s_defines), PATHLEN);
 		pathlist_construct(s_includes, incbuf);
 		pathlist_construct(s_links, linkbuf);
 		pathlist_construct(s_libs, libbuf);
+        pathlist_construct(s_defines, defbuf);
 		char* commandbuf = calloc(strlen(incbuf) + strlen(linkbuf) + strlen(libbuf) + PATHLEN, sizeof(char));
 		sprintf(
 			commandbuf,
-			"gcc -Wall -Wextra -Wno-unused-parameter -c %s %s%s%s-o %s.o %s",
+			"gcc %s-Wall -Wextra -Wno-unused-parameter -c %s %s%s%s-o %s.o %s",
+            defbuf,
 			file,
 			incbuf,
 			libbuf,
@@ -1109,11 +1113,14 @@ void add_vendors() {
 			} else {
 				pathlist_add(&s_sources, line + postcursor);
 			}
-        }else if (strcmp(precursor, "FLAG") == 0) {
+        } else if (strcmp(precursor, "FLAG") == 0) {
             char b[PATHLEN] = { 0 };
             sprintf(b, "-%s", line + postcursor);
             parseflag(b, 0);
-		} else if (strcmp(precursor, "PROJECT") != 0 && strcmp(precursor, "MAIN") != 0) {
+		} else if (strcmp(precursor, "DEFINE") == 0) {
+            snprintf(workbuffer, PATHLEN, "-D\"%s\"", line + postcursor);
+            pathlist_add(&s_defines, workbuffer);
+        } else if (strcmp(precursor, "PROJECT") != 0 && strcmp(precursor, "MAIN") != 0) {
 			warn("Unknown precursor \"%s\" detected on line %d of \".tinyconf\" - skipping", precursor, linecount);
 		}
 	}
@@ -1139,13 +1146,16 @@ void compile_vendors() {
 		char* incbuf = calloc(pathlist_len(s_includes), PATHLEN);
 		char* linkbuf = calloc(pathlist_len(s_links), PATHLEN);
 		char* libbuf = calloc(pathlist_len(s_libs), PATHLEN);
+        char* defbuf = calloc(pathlist_len(s_defines), PATHLEN);
 		pathlist_construct(s_includes, incbuf);
 		pathlist_construct(s_links, linkbuf);
 		pathlist_construct(s_libs, libbuf);
+        pathlist_construct(s_defines, defbuf);
 		char* commandbuf = calloc(strlen(incbuf) + strlen(linkbuf) + strlen(libbuf) + PATHLEN, sizeof(char));
 		sprintf(
 			commandbuf,
-			"gcc -Wall -Wextra -Wno-unused-parameter -c build/vendor/tiny_merged_vendors.c %s%s%s-o build/vendor/vendor.o %s",
+			"gcc %s-Wall -Wextra -Wno-unused-parameter -c build/vendor/tiny_merged_vendors.c %s%s%s-o build/vendor/vendor.o %s",
+            defbuf,
 			incbuf,
 			libbuf,
 			linkbuf,
@@ -1242,14 +1252,17 @@ void compile_executable() {
 	char* linkbuf = calloc(pathlist_len(s_links), PATHLEN);
 	char* libbuf = calloc(pathlist_len(s_libs), PATHLEN);
 	char* objbuf = calloc(pathlist_len(s_objects), PATHLEN);
+    char* defbuf = calloc(pathlist_len(s_defines), PATHLEN);
 	pathlist_construct(s_includes, incbuf);
 	pathlist_construct(s_links, linkbuf);
 	pathlist_construct(s_libs, libbuf);
 	pathlist_construct(s_objects, objbuf);
+    pathlist_construct(s_defines, defbuf);
 	char* commandbuf = calloc(strlen(incbuf) + strlen(linkbuf) + strlen(libbuf) + strlen(objbuf) + PATHLEN, sizeof(char));
 	sprintf(
 		commandbuf,
-		"gcc -Wall -Wextra -Wno-unused-parameter %s %s%s%s%s-o build/bin.exe %s",
+		"gcc %s-Wall -Wextra -Wno-unused-parameter %s %s%s%s%s-o build/bin.exe %s",
+        defbuf,
 		s_main_file_path,
 		objbuf,
 		incbuf,
@@ -1392,6 +1405,7 @@ int main(int argc, char* argv[]) {
 	pathlist_delete(s_sources);
 	pathlist_delete(s_includes);
 	pathlist_delete(s_links);
+    pathlist_delete(s_defines);
 	pathlist_delete(s_libs);
 	s_start_time = mtime() - s_start_time;
 	int hours = (int)(s_start_time / 3600000);
