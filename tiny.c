@@ -4,7 +4,7 @@
 */
 #define VERSION 1
 #define MAJOR_RELEASE 1
-#define MINOR_RELEASE 3
+#define MINOR_RELEASE 4
 
 #include <stdio.h>
 #include <time.h>
@@ -305,6 +305,7 @@ TINY_THREAD* s_threads = NULL;
 int* s_active_threads = NULL;
 TINY_MUTEX s_mutex;
 int s_sourcei = 0;
+int s_easymemory_detected = 0;
 
 void pathlist_add(PathList** list, const char* path) {
 	PathList* new = calloc(1, sizeof(PathList));
@@ -448,6 +449,36 @@ int functionline(const char* line) {
 	return 0;
 }
 
+void easyc_audit(const char* file) {
+	int slen = strlen(file);
+	int header = (slen > 2 && (file[slen - 1] == 'h' && file[slen - 2] == '.'));
+	int source = (slen > 2 && (file[slen - 1] == 'c' && file[slen - 2] == '.'));
+	if (!header && !source) {
+		return;
+	}
+	int basename_ptr = 0;
+	for (int i = slen; i > 0; i--) {
+		if (file[i] == '/' || file[i] == '\\') {
+			basename_ptr = i + 1;
+			break;
+		}
+	}
+	FILE* fp = fopen(file, "r");
+	if (!fp) {
+        crash("Failed to open file");
+    }
+	char line[PATHLEN * 2] = { 0 };
+	int linecount = 0;
+	while (fgets(line, sizeof(line), fp)) {
+		linecount++;
+		if (strstr(line,"malloc(") || strstr(line, "calloc(") || strstr(line, "free(")) {
+			print("Detected unmonitored memory operation in \"%s\" on line %d", file, linecount);
+			s_vulnerabilities++;
+		}
+	}
+	fclose(fp);
+}
+
 void syntax_audit(const char* file) {
 	int slen = strlen(file);
 	int header = (slen > 2 && (file[slen - 1] == 'h' && file[slen - 2] == '.'));
@@ -532,10 +563,6 @@ void syntax_audit(const char* file) {
 			if (linelen >= 6 && strcmp("#endif", endbuf) == 0) header_closed = 1;
 			else if (!empty_line) header_closed = 0;
 		}
-		if (strstr(line,"malloc(") || strstr(line, "calloc(") || strstr(line, "free(")) {
-			print("Detected unmonitored memory operation in \"%s\" on line %d", file, linecount);
-			s_vulnerabilities++;
-		}
 		if (header) {
 			if (functionline(line)) {
 				char implbuf[PATHLEN] = { 0 };
@@ -565,14 +592,18 @@ void syntax_audit(const char* file) {
                     }
 					char srcline[PATHLEN * 2] = { 0 };
 					int srclc = 0;
+                    int srcbilc = 0;
 					while (fgets(srcline, sizeof(srcline), sfp)) {
 						srclc++;
 						if (strstr(srcline, implbuf)) implfound = 1;
-						if (strstr(srcline, badimplbuf)) badimplfound = 1;
+						if (strstr(srcline, badimplbuf)) {
+                            badimplfound = 1;
+                            srcbilc = srclc;
+                        }
 					}
 					if (!implfound) {
 						if (badimplfound) {
-							print("The function implementation in \"%s\" on line %d is improperly formatted - please have a space in between the function and the curly brace.", srcfilepath, srclc);
+							print("The function implementation in \"%s\" on line %d is improperly formatted - please have a space in between the function and the curly brace.", srcfilepath, srcbilc);
 							s_vulnerabilities++;
 						} else {
 							print("Unable to find an implementation for the function on line %d of header \"%s\" in the corresponding source file", linecount, file);
@@ -588,6 +619,7 @@ void syntax_audit(const char* file) {
 		}
 		if (header) {
 			if (strstr(line, "#include")) {
+                if (strstr(line, "easymemory.h")) s_easymemory_detected = 1;
 				char ibuf[PATHLEN] = { 0 };
 				int ind = 0;
 				int toggle = 0;
@@ -607,6 +639,7 @@ void syntax_audit(const char* file) {
 		}
 		if (source) {
 			if (strstr(line, "#include")) {
+                if (strstr(line, "easymemory.h")) s_easymemory_detected = 1;
 				char ibuf[PATHLEN] = { 0 };
 				int ind = 0;
 				int toggle = 0;
@@ -1314,7 +1347,6 @@ void audit() {
 	print("Auditing project...")
 	uint64_t timer = mtime();
 	walkfiles(s_project_directory, syntax_audit);
-
 	HeaderLinkList* header = s_header_links;
 	while (header) {
 		PathList* primary = header->link->links;
@@ -1377,6 +1409,7 @@ void audit() {
 		}
 		source = (HeaderLinkList*)source->next;
 	}
+    if (s_easymemory_detected) walkfiles(s_project_directory, easyc_audit);
 
 	timer = mtime() - timer;
 	int hours = (int)(timer / 3600000);

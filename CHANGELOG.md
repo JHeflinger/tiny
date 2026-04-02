@@ -1,6 +1,16 @@
 # Change Log
 All notable changes to this project will be documented in this file as of Tiny v1.0
 
+## Tiny 1.1.4
+
+### Changed
+
+- audit will now first parse for an easyc header before parsing for unmonitored memory operations
+
+### Fixed
+
+- audit checks for nospaces between functions and braces now show the correct lines
+
 ## Tiny 1.1.3
 
 ### Added
