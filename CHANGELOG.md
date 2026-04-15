@@ -1,6 +1,12 @@
 # Change Log
 All notable changes to this project will be documented in this file as of Tiny v1.0
 
+## Tiny 1.1.5
+
+### Added
+
+- added mac support
+
 ## Tiny 1.1.4
 
 ### Changed

@@ -14,7 +14,7 @@ Tiny is a small project manager for C projects. If you're using gcc as your comp
 
 ## STATUS
 
-Tiny is currently experimental! It supports incremental builds in C and can be used for all simple projects. Builds for Linux and Windows are currently supported. There are no plans to port for Mac as of now, but if you'd like to submit a PR to do so, feel free!
+Tiny is currently experimental! It supports incremental builds in C and can be used for all simple projects. Builds for Linux, Windows and even MacOS are currently supported.
 
 ## REQUIREMENTS
 
@@ -25,7 +25,7 @@ All Tiny requires is gcc installed and ready to use on your path. Beyond that, y
 There is no official builder for Tiny, it's all in one singular C file! Compile that into an 
 executable however you wish! With gcc, it's as simple as `gcc tiny.c`
 
-> NOTE: As of tiny 1.1, multithreading capabilities are available! This means that if you're on linux, you'll have to link pthreads, so the compile command will be `gcc tiny.c -pthread` (Sorry for forcing you to add another whole word onto the compile command!)
+> NOTE: As of tiny 1.1, multithreading capabilities are available! This means that if you're on linux or macos, you'll have to link pthreads, so the compile command will be `gcc tiny.c -pthread` (Sorry for forcing you to add another whole word onto the compile command!)
 
 ## HOW TO USE
 
@@ -44,12 +44,12 @@ To configure Tiny to be a bit more accustomed to your use, make a `.tinyconf` fi
 | FLAG | <flag> | Here you can add one of the flags later mentioned to configure your build |
 | DEFINE | <definition> | Here you can add a compile definition to configure your build |
 
-Additionally, you can also preface each configuration line with an operating system to use it exclusively on that operating system build! Currently only `WINDOWS` and `LINUX` are supported,
-as there are only builds for those respective operating systems available. Some example usage of this feature may look like the following:
+Additionally, you can also preface each configuration line with an operating system to use it exclusively on that operating system build! Some example usage of this feature may look like the following:
 
 ```
 WINDOWS INCLUDE vendor/windows/lib/include
 LINUX INCLUDE vendor/linux/lib/include
+MACOS INCLUDE vendor/macos/lib/include
 ```
 
 Some overall example content of what a `.tinyconf` can look like can look like the following:

@@ -4,7 +4,7 @@
 */
 #define VERSION 1
 #define MAJOR_RELEASE 1
-#define MINOR_RELEASE 4
+#define MINOR_RELEASE 5
 
 #include <stdio.h>
 #include <time.h>
@@ -244,6 +244,102 @@ typedef void (*FileHandler)(const char*);
 
 	uint64_t mtime() {
 		return (uint64_t)GetTickCount64();
+	}
+#elif __APPLE__
+	#include <unistd.h>
+	#include <dirent.h>
+	#include <sys/time.h>
+	#include <pthread.h>
+	#include <limits.h>
+
+	#define cwd(buffer) getcwd(buffer, sizeof(buffer))
+	#define makedir(dir) (!mkdir(dir, 0755))
+
+	typedef pthread_t TINY_THREAD;
+	typedef pthread_mutex_t TINY_MUTEX;
+	typedef pthread_cond_t TINY_COND;
+
+	#define TINY_THREAD_RETURN_TYPE void*
+	#define TINY_THREAD_PARAMETER_TYPE void*
+	#define TINY_CREATE_THREAD(thread, func, parameters) pthread_create(&thread, NULL, (void* (*)(void*))func, parameters)
+	#define TINY_WAIT_THREAD(thread) pthread_join(thread, NULL)
+	#define TINY_CREATE_MUTEX(mutex) pthread_mutex_init(&mutex, NULL);
+	#define TINY_LOCK_MUTEX(mutex) pthread_mutex_lock(&mutex)
+	#define TINY_RELEASE_MUTEX(mutex) pthread_mutex_unlock(&mutex)
+	#define TINY_CREATE_COND(cond) pthread_cond_init(&cond, NULL);
+	#define TINY_WAIT_COND(cond, mutex) pthread_cond_wait(&cond, &mutex)
+	#define TINY_SIGNAL_COND(cond) pthread_cond_signal(&cond)
+	#define TINY_BROADCAST_COND(cond) pthread_cond_broadcast(&cond)
+
+	int threadcount() {
+		return (int)sysconf(_SC_NPROCESSORS_ONLN);
+	}
+
+	int dexists(const char* dir) {
+		struct stat statbuf;
+		if (stat(dir, &statbuf) != 0) {
+			return 0;
+		}
+		return S_ISDIR(statbuf.st_mode);
+	}
+
+	int fexists(const char* file) {
+		struct stat statbuf;
+		if (stat(file, &statbuf) != 0) {
+			return 0;
+		}
+		return !S_ISDIR(statbuf.st_mode);
+	}
+
+	void walkdir(const char* path, FileHandler func) {
+		DIR *dir = opendir(path);
+		if (!dir) {
+			crash("Unable to open directory \"%s\"", path);
+		}
+		struct dirent *entry;
+		while ((entry = readdir(dir)) != NULL) {
+			if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+			char full_path[PATH_MAX];
+			snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
+			struct stat statbuf;
+			if (stat(full_path, &statbuf) != 0) {
+				crash("Stat call failed");
+			}
+			if (S_ISDIR(statbuf.st_mode)) {
+				func(full_path);
+				walkdir(full_path, func);
+			}
+		}
+		closedir(dir);
+	}
+
+	void walkfiles(const char* path, FileHandler func) {
+		DIR *dir = opendir(path);
+		if (!dir) {
+			crash("Unable to open directory \"%s\"", path);
+		}
+		struct dirent *entry;
+		while ((entry = readdir(dir)) != NULL) {
+			if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+			char full_path[PATH_MAX];
+			snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
+			struct stat statbuf;
+			if (stat(full_path, &statbuf) != 0) {
+				crash("Stat call failed");
+			}
+			if (!S_ISDIR(statbuf.st_mode)) {
+				func(full_path);
+			} else {
+				walkfiles(full_path, func);
+			}
+		}
+		closedir(dir);
+	}
+
+	uint64_t mtime() {
+		struct timeval tv;
+		gettimeofday(&tv, NULL);
+		return (uint64_t)(tv.tv_sec) * 1000 + (tv.tv_usec) / 1000;
 	}
 #else
 	#error "Unsupported operating system detected!"
@@ -1104,6 +1200,9 @@ void add_vendors() {
 			if (strcmp(precursor, "LINUX") == 0) {
 				continue;
 			}
+			if (strcmp(precursor, "MACOS") == 0) {
+				continue;
+			}
 			if (strcmp(precursor, "WINDOWS") == 0) {
 				for (size_t i = postcursor; i < strlen(line); i++) {
 					if (line[i] == ' ') {
@@ -1119,7 +1218,28 @@ void add_vendors() {
 			if (strcmp(precursor, "WINDOWS") == 0) {
 				continue;
 			}
+			if (strcmp(precursor, "MACOS") == 0) {
+				continue;
+			}
 			if (strcmp(precursor, "LINUX") == 0) {
+				for (size_t i = postcursor; i < strlen(line); i++) {
+					if (line[i] == ' ') {
+						precursor[i - postcursor] = '\0';
+						postcursor = i + 1;
+						break;
+					} else {
+						precursor[i - postcursor] = line[i];
+					}
+				}
+			}
+        #elif __APPLE__
+			if (strcmp(precursor, "WINDOWS") == 0) {
+				continue;
+			}
+			if (strcmp(precursor, "LINUX") == 0) {
+				continue;
+			}
+			if (strcmp(precursor, "MACOS") == 0) {
 				for (size_t i = postcursor; i < strlen(line); i++) {
 					if (line[i] == ' ') {
 						precursor[i - postcursor] = '\0';
