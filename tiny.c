@@ -1270,6 +1270,9 @@ void add_vendors() {
             char b[PATHLEN] = { 0 };
             sprintf(b, "-%s", line + postcursor);
             parseflag(b, 0);
+        } else if (strcmp(precursor, "FRAMEWORK") == 0) {
+			snprintf(workbuffer, PATHLEN, "-framework %s", line + postcursor);
+			pathlist_add(&s_links, workbuffer);
 		} else if (strcmp(precursor, "DEFINE") == 0) {
             snprintf(workbuffer, PATHLEN, "-D\"%s\"", line + postcursor);
             pathlist_add(&s_defines, workbuffer);
