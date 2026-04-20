@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file as of Tiny v
 ### Added
 
 - added override option to pass in a raw argument to GCC
+- added debug flag to check proceed final command buffer
 
 ## Tiny 1.1.5
 

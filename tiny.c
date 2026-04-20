@@ -350,6 +350,7 @@ typedef enum {
 	PROD = 1 << 0,
 	AUDIT = 1 << 1,
     FAST = 1 << 2,
+    DEBUG = 1 << 3,
 } BuildFlags;
 
 typedef struct {
@@ -1099,6 +1100,8 @@ void parseflag(char* flag, int blacklistable) {
         } else {
             s_unflags |= FAST;
         }
+    } else if (strcmp("-d", buffer) == 0 || strcmp("-debug", buffer) == 0) {
+        s_flags |= DEBUG;
 	} else {
         crash("Unknown flag \"%s\" detected", buffer);
     }
@@ -1442,9 +1445,7 @@ void compile_executable() {
 		linkbuf,
         rawbuf,
 		s_flags & PROD ? "-O3 -DPROD_BUILD" : "");
-    
-    printf("\n\n%s\n\n", commandbuf);
-
+    if (s_flags & DEBUG) printf("\n\n==========DEBUG COMMAND BUFFER==========\n\n%s\n\n========END DEBUG COMMAND BUFFER========\n\n", commandbuf);
 	int result = system(commandbuf);
 	timer = mtime() - timer;
 	if (result == 0) {
