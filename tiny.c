@@ -989,7 +989,7 @@ void compile_source(const char* file) {
 		char* commandbuf = calloc(strlen(incbuf) + strlen(linkbuf) + strlen(libbuf) + PATHLEN, sizeof(char));
 		sprintf(
 			commandbuf,
-			"gcc %s-Wall -Wextra -Wno-unused-parameter -c %s %s%s%s-o %s.o%s %s",
+			"gcc %s-Wall -Wextra -Wno-unused-parameter -c %s %s%s%s-o %s.o %s%s",
             defbuf,
 			file,
 			incbuf,
@@ -1324,7 +1324,7 @@ void compile_vendors() {
 		char* commandbuf = calloc(strlen(incbuf) + strlen(linkbuf) + strlen(libbuf) + PATHLEN, sizeof(char));
 		sprintf(
 			commandbuf,
-			"gcc %s-Wall -Wextra -Wno-unused-parameter -c build/vendor/tiny_merged_vendors.c %s%s%s-o build/vendor/vendor.o%s %s",
+			"gcc %s-Wall -Wextra -Wno-unused-parameter -c build/vendor/tiny_merged_vendors.c %s%s%s-o build/vendor/vendor.o %s%s",
             defbuf,
 			incbuf,
 			libbuf,
@@ -1436,7 +1436,7 @@ void compile_executable() {
 	char* commandbuf = calloc(strlen(incbuf) + strlen(linkbuf) + strlen(libbuf) + strlen(objbuf) + PATHLEN, sizeof(char));
 	sprintf(
 		commandbuf,
-		"gcc %s-Wall -Wextra -Wno-unused-parameter %s %s%s%s%s-o build/bin.exe%s %s",
+		"gcc %s-Wall -Wextra -Wno-unused-parameter %s %s%s%s%s-o build/bin.exe %s%s",
         defbuf,
 		s_main_file_path,
 		objbuf,
