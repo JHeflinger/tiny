@@ -4,7 +4,7 @@
 */
 #define VERSION 1
 #define MAJOR_RELEASE 1
-#define MINOR_RELEASE 5
+#define MINOR_RELEASE 6
 
 #include <stdio.h>
 #include <time.h>
@@ -1442,6 +1442,9 @@ void compile_executable() {
 		linkbuf,
         rawbuf,
 		s_flags & PROD ? "-O3 -DPROD_BUILD" : "");
+    
+    printf("\n\n%s\n\n", commandbuf);
+
 	int result = system(commandbuf);
 	timer = mtime() - timer;
 	if (result == 0) {
