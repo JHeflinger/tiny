@@ -1286,8 +1286,8 @@ void add_vendors() {
             snprintf(workbuffer, PATHLEN, "-D\"%s\"", line + postcursor);
             pathlist_add(&s_defines, workbuffer);
         } else if (strcmp(precursor, "RAW") == 0) {
-			snprintf(workbuffer, PATHLEN, "-l%s", line + postcursor);
-			pathlist_add(&s_links, workbuffer); // just adding to links since they all get passsed to gcc in the end
+			snprintf(workbuffer, PATHLEN, "%s", line + postcursor);
+			pathlist_add(&s_raws, workbuffer);
         } else if (strcmp(precursor, "PROJECT") != 0 && strcmp(precursor, "MAIN") != 0) {
 			warn("Unknown precursor \"%s\" detected on line %d of \".tinyconf\" - skipping", precursor, linecount);
 		}
