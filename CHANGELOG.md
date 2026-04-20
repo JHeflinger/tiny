@@ -1,6 +1,12 @@
 # Change Log
 All notable changes to this project will be documented in this file as of Tiny v1.0
 
+## Tiny 1.1.6
+
+### Added
+
+- added override option to pass in a raw argument to GCC
+
 ## Tiny 1.1.5
 
 ### Added

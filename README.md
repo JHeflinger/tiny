@@ -43,6 +43,7 @@ To configure Tiny to be a bit more accustomed to your use, make a `.tinyconf` fi
 | SOURCE | <path_to_directory_or_file> | Here you can define outside sources to include into your project. If you have third party vendors with `.c` files, include those here! You can provide the path to a singular file, or a directory of sources, whichever works best for you! |
 | FLAG | <flag> | Here you can add one of the flags later mentioned to configure your build |
 | DEFINE | <definition> | Here you can add a compile definition to configure your build |
+| RAW | <raw_arg> | Here you can pass a raw argument to gcc |
 
 Additionally, you can also preface each configuration line with an operating system to use it exclusively on that operating system build! Some example usage of this feature may look like the following:
 

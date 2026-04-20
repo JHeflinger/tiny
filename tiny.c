@@ -390,6 +390,7 @@ char s_main_file_path[PATHLEN] = { 0 };
 char s_cwd[PATHLEN] = { 0 };
 PathList* s_includes = NULL;
 PathList* s_links = NULL;
+PathList* s_raws = NULL;
 PathList* s_defines = NULL;
 PathList* s_libs = NULL;
 PathList* s_sources = NULL;
@@ -976,21 +977,24 @@ void compile_source(const char* file) {
 		}
 		char* incbuf = calloc(pathlist_len(s_includes), PATHLEN);
 		char* linkbuf = calloc(pathlist_len(s_links), PATHLEN);
+        char* rawbuf = calloc(pathlist_len(s_raws), PATHLEN);
 		char* libbuf = calloc(pathlist_len(s_libs), PATHLEN);
         char* defbuf = calloc(pathlist_len(s_defines), PATHLEN);
 		pathlist_construct(s_includes, incbuf);
 		pathlist_construct(s_links, linkbuf);
+        pathlist_construct(s_raws, rawbuf);
 		pathlist_construct(s_libs, libbuf);
         pathlist_construct(s_defines, defbuf);
 		char* commandbuf = calloc(strlen(incbuf) + strlen(linkbuf) + strlen(libbuf) + PATHLEN, sizeof(char));
 		sprintf(
 			commandbuf,
-			"gcc %s-Wall -Wextra -Wno-unused-parameter -c %s %s%s%s-o %s.o %s",
+			"gcc %s-Wall -Wextra -Wno-unused-parameter -c %s %s%s%s%s-o %s.o %s",
             defbuf,
 			file,
 			incbuf,
 			libbuf,
 			linkbuf,
+            rawbuf,
 			destination,
 			s_flags & PROD ? "-O3 -flto -DPROD_BUILD" : "");
 		if (!fexists(destination) || !filecmp(file, destination)) {
@@ -1041,7 +1045,9 @@ void compile_source(const char* file) {
 		pathlist_add(&s_objects, finalbuf);
 		free(incbuf);
 		free(linkbuf);
+        free(rawbuf);
 		free(libbuf);
+        free(defbuf);
 	}
 }
 
@@ -1276,6 +1282,9 @@ void add_vendors() {
 		} else if (strcmp(precursor, "DEFINE") == 0) {
             snprintf(workbuffer, PATHLEN, "-D\"%s\"", line + postcursor);
             pathlist_add(&s_defines, workbuffer);
+        } else if (strcmp(precursor, "RAW") == 0) {
+			snprintf(workbuffer, PATHLEN, "-l%s", line + postcursor);
+			pathlist_add(&s_links, workbuffer); // just adding to links since they all get passsed to gcc in the end
         } else if (strcmp(precursor, "PROJECT") != 0 && strcmp(precursor, "MAIN") != 0) {
 			warn("Unknown precursor \"%s\" detected on line %d of \".tinyconf\" - skipping", precursor, linecount);
 		}
@@ -1301,20 +1310,23 @@ void compile_vendors() {
 		fclose(file);
 		char* incbuf = calloc(pathlist_len(s_includes), PATHLEN);
 		char* linkbuf = calloc(pathlist_len(s_links), PATHLEN);
+        char* rawbuf = calloc(pathlist_len(s_raws), PATHLEN);
 		char* libbuf = calloc(pathlist_len(s_libs), PATHLEN);
         char* defbuf = calloc(pathlist_len(s_defines), PATHLEN);
 		pathlist_construct(s_includes, incbuf);
 		pathlist_construct(s_links, linkbuf);
+        pathlist_construct(s_raws, rawbuf);
 		pathlist_construct(s_libs, libbuf);
         pathlist_construct(s_defines, defbuf);
 		char* commandbuf = calloc(strlen(incbuf) + strlen(linkbuf) + strlen(libbuf) + PATHLEN, sizeof(char));
 		sprintf(
 			commandbuf,
-			"gcc %s-Wall -Wextra -Wno-unused-parameter -c build/vendor/tiny_merged_vendors.c %s%s%s-o build/vendor/vendor.o %s",
+			"gcc %s-Wall -Wextra -Wno-unused-parameter -c build/vendor/tiny_merged_vendors.c %s%s%s%s-o build/vendor/vendor.o %s",
             defbuf,
 			incbuf,
 			libbuf,
 			linkbuf,
+            rawbuf,
 			s_flags & PROD ? "-O3 -DPROD_BUILD" : "");
 		uint64_t timer = mtime();
 		int result = system(commandbuf);
@@ -1330,7 +1342,9 @@ void compile_vendors() {
 		free(commandbuf);
 		free(incbuf);
 		free(linkbuf);
+        free(rawbuf);
 		free(libbuf);
+        free(defbuf);
 	}
 	pathlist_add(&s_objects, "build/vendor/vendor.o");
 }
@@ -1406,24 +1420,27 @@ void compile_executable() {
 	uint64_t timer = mtime();
 	char* incbuf = calloc(pathlist_len(s_includes), PATHLEN);
 	char* linkbuf = calloc(pathlist_len(s_links), PATHLEN);
+    char* rawbuf = calloc(pathlist_len(s_raws), PATHLEN);
 	char* libbuf = calloc(pathlist_len(s_libs), PATHLEN);
 	char* objbuf = calloc(pathlist_len(s_objects), PATHLEN);
     char* defbuf = calloc(pathlist_len(s_defines), PATHLEN);
 	pathlist_construct(s_includes, incbuf);
 	pathlist_construct(s_links, linkbuf);
 	pathlist_construct(s_libs, libbuf);
+    pathlist_construct(s_raws, rawbuf);
 	pathlist_construct(s_objects, objbuf);
     pathlist_construct(s_defines, defbuf);
 	char* commandbuf = calloc(strlen(incbuf) + strlen(linkbuf) + strlen(libbuf) + strlen(objbuf) + PATHLEN, sizeof(char));
 	sprintf(
 		commandbuf,
-		"gcc %s-Wall -Wextra -Wno-unused-parameter %s %s%s%s%s-o build/bin.exe %s",
+		"gcc %s-Wall -Wextra -Wno-unused-parameter %s %s%s%s%s%s-o build/bin.exe %s",
         defbuf,
 		s_main_file_path,
 		objbuf,
 		incbuf,
 		libbuf,
 		linkbuf,
+        rawbuf,
 		s_flags & PROD ? "-O3 -DPROD_BUILD" : "");
 	int result = system(commandbuf);
 	timer = mtime() - timer;
@@ -1441,6 +1458,7 @@ void compile_executable() {
 	free(incbuf);
 	free(linkbuf);
 	free(libbuf);
+    free(rawbuf);
 }
 
 void get_in_depth_headers(const char* dive_header, HeaderLinkList* update_header) {
@@ -1563,6 +1581,7 @@ int main(int argc, char* argv[]) {
 	pathlist_delete(s_links);
     pathlist_delete(s_defines);
 	pathlist_delete(s_libs);
+    pathlist_delete(s_raws);
 	s_start_time = mtime() - s_start_time;
 	int hours = (int)(s_start_time / 3600000);
 	int minutes = (int)((s_start_time - (hours * 3600000)) / 60000);
