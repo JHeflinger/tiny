@@ -989,7 +989,7 @@ void compile_source(const char* file) {
 		char* commandbuf = calloc(strlen(incbuf) + strlen(linkbuf) + strlen(libbuf) + PATHLEN, sizeof(char));
 		sprintf(
 			commandbuf,
-			"gcc %s-Wall -Wextra -Wno-unused-parameter -c %s %s%s%s-o %s.o %s%s",
+			"gcc %s-Wall -Wextra -Wno-unused-parameter -c %s %s%s%s-o %s.o %s %s",
             defbuf,
 			file,
 			incbuf,
