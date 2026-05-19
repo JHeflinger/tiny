@@ -764,7 +764,7 @@ void syntax_audit(const char* file) {
 						print("The global variable detected in \"%s\" on line %d is not translation protected - please make it static.", file, linecount);
 					    s_vulnerabilities++;
                     }
-                    if (functionimplline(line)) {
+                    if (functionimplline(line) && !strstr(line, "int main(")) {
 				        char implbuf[PATHLEN] = { 0 };
                         strcpy(implbuf, line);
                         int implcorrect = 0;
