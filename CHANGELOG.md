@@ -1,6 +1,12 @@
 # Change Log
 All notable changes to this project will be documented in this file as of Tiny v1.0
 
+## Tiny 1.1.7
+
+### Added
+
+- audit now detects when variables and functions should be static
+
 ## Tiny 1.1.6
 
 ### Added

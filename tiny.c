@@ -4,7 +4,7 @@
 */
 #define VERSION 1
 #define MAJOR_RELEASE 1
-#define MINOR_RELEASE 6
+#define MINOR_RELEASE 7
 
 #include <stdio.h>
 #include <time.h>
@@ -547,6 +547,26 @@ int functionline(const char* line) {
 	return 0;
 }
 
+int functionimplline(const char* line) {
+	int sfound = 0;
+	int typefound = 0;
+	int p1found = 0;
+	int p2found = 0;
+	int i = 0;
+	while (1) {
+		if (line[i] == '\0') return 0;
+		if (!sfound && line[i] != ' ') sfound = 1;
+		if (sfound && !typefound && line[i] == ' ') typefound = 1;
+		else if (typefound && line[i] == '(' && !p1found) p1found = 1;
+		else if (p1found && line[i] == '(') return 0;
+		else if (p1found && line[i] == ')') p2found = 1;
+		else if (p2found && line[i] == '{') return 1;
+		else if (p2found && line[i] != ' ') return 0;
+		i++;
+	}
+	return 0;
+}
+
 void easyc_audit(const char* file) {
 	int slen = strlen(file);
 	int header = (slen > 2 && (file[slen - 1] == 'h' && file[slen - 2] == '.'));
@@ -680,7 +700,7 @@ void syntax_audit(const char* file) {
 				}
 				int implfound = 0;
 				int badimplfound = 0;
-				char srcfilepath[PATHLEN] = { 0 };
+                char srcfilepath[PATHLEN] = { 0 };
 				strcpy(srcfilepath, file);
 				srcfilepath[slen - 1] = 'c';
 				if (fexists(srcfilepath)) {
@@ -736,6 +756,59 @@ void syntax_audit(const char* file) {
 			}
 		}
 		if (source) {
+            if (line[0] != 0 && line[0] != '\n' && line[0] != '\r' && line[0] != ' ' && line[0] != '\t') {
+                if (!strstr(line, "static") &&
+                    !strstr(line, "}") &&
+                    !strstr(line, "#")) {
+                    if (strstr(line, "=")) {
+						print("The global variable detected in \"%s\" on line %d is not translation protected - please make it static.", file, linecount);
+					    s_vulnerabilities++;
+                    }
+                    if (functionimplline(line)) {
+				        char implbuf[PATHLEN] = { 0 };
+                        strcpy(implbuf, line);
+                        int implcorrect = 0;
+                        for (int i = 0; i < PATHLEN; i++) {
+                            if (line[i] == '{') {
+                                if (i > 0 && line[i - 1] == ' ') {
+                                    implbuf[i - 1] = ';';
+                                    implbuf[i] = 0;
+                                } else {
+                                    implbuf[i] = ';';
+                                    implbuf[i + 1] = 0;
+                                }
+                                implcorrect = 1;
+                            }
+                        }
+                        if (implcorrect) {
+				            char hfilepath[PATHLEN] = { 0 };
+				            strcpy(hfilepath, file);
+				            hfilepath[slen - 1] = 'h';
+                            int needs_static = 1;
+                            if (fexists(hfilepath)) {
+                                FILE* hfp = fopen(hfilepath, "r");
+                                if (!hfp) {
+                                    crash("Unable to open file");
+                                }
+                                char hline[PATHLEN * 2] = { 0 };
+                                int hlc = 0;
+                                while (fgets(hline, sizeof(hline), hfp)) {
+                                    hlc++;
+                                    if (strstr(hline, implbuf)) {
+                                        needs_static = 0;
+                                        break;
+                                    }
+                                }
+                                fclose(hfp);
+                            }
+                            if (needs_static) {
+						        print("The global function detected in \"%s\" on line %d is not translation protected - please make it static.", file, linecount);
+					            s_vulnerabilities++;
+                            }
+                        }
+                    }
+                }
+            }
 			if (strstr(line, "#include")) {
                 if (strstr(line, "easymemory.h")) s_easymemory_detected = 1;
 				char ibuf[PATHLEN] = { 0 };
