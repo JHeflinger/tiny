@@ -528,6 +528,7 @@ void add_header_secondary(const char* header, const char* link) {
 }
 
 int functionline(const char* line) {
+    if (strstr(line, "#define")) return 0;
 	int sfound = 0;
 	int typefound = 0;
 	int p1found = 0;
@@ -548,6 +549,7 @@ int functionline(const char* line) {
 }
 
 int functionimplline(const char* line) {
+    if (strstr(line, "#define")) return 0;
 	int sfound = 0;
 	int typefound = 0;
 	int p1found = 0;
