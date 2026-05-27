@@ -1,6 +1,12 @@
 # Change Log
 All notable changes to this project will be documented in this file as of Tiny v1.0
 
+## Tiny 1.1.8
+
+### Added
+
+- new flag 
+
 ## Tiny 1.1.7
 
 ### Added

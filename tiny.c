@@ -351,6 +351,7 @@ typedef enum {
 	AUDIT = 1 << 1,
     FAST = 1 << 2,
     DEBUG = 1 << 3,
+    RECOMPILE_VENDORS = 1 << 4,
 } BuildFlags;
 
 typedef struct {
@@ -1177,6 +1178,8 @@ void parseflag(char* flag, int blacklistable) {
         }
     } else if (strcmp("-d", buffer) == 0 || strcmp("-debug", buffer) == 0) {
         s_flags |= DEBUG;
+    } else if (strcmp("-rv", buffer) == 0 || strcmp("-recompile_vendors", buffer) == 0) {
+        s_flags |= RECOMPILE_VENDORS;
 	} else {
         crash("Unknown flag \"%s\" detected", buffer);
     }
@@ -1372,7 +1375,7 @@ void add_vendors() {
 
 void compile_vendors() {
 	if (s_sources == NULL) return;
-	if (!fexists("build/vendor/vendor.o")) {
+	if (!fexists("build/vendor/vendor.o") || s_flags && RECOMPILE_VENDORS) {
 		print("Compiling vendors...");
 		FILE* file = fopen("build/vendor/tiny_merged_vendors.c", "w");
 		if (!file) {

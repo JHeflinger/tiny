@@ -80,6 +80,7 @@ There are also some various flags you can add to customize your build process! Y
 | -a | audits project directory for vulnerabilities |
 | -f | compiles in parallel |
 | -d | outputs compiled command buffer |
+| -rv | recompiles vendors as well |
 
 ## OUTPUT
 
