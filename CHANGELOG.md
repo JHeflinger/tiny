@@ -5,7 +5,8 @@ All notable changes to this project will be documented in this file as of Tiny v
 
 ### Added
 
-- new flag 
+- new flag to recompile vendors
+- can now comment out lines in .tinyconf with "#"
 
 ## Tiny 1.1.7
 

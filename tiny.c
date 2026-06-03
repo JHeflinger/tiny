@@ -4,7 +4,7 @@
 */
 #define VERSION 1
 #define MAJOR_RELEASE 1
-#define MINOR_RELEASE 7
+#define MINOR_RELEASE 8
 
 #include <stdio.h>
 #include <time.h>
@@ -1282,7 +1282,7 @@ void add_vendors() {
 				precursor[i] = line[i];
 			}
 		}
-        if (strlen(line) == 0) continue;
+        if (strlen(line) == 0 || line[0] == '#') continue;
 		#ifdef __WIN32
 			if (strcmp(precursor, "LINUX") == 0) {
 				continue;
@@ -1375,7 +1375,7 @@ void add_vendors() {
 
 void compile_vendors() {
 	if (s_sources == NULL) return;
-	if (!fexists("build/vendor/vendor.o") || s_flags && RECOMPILE_VENDORS) {
+	if (!fexists("build/vendor/vendor.o") || (s_flags & RECOMPILE_VENDORS)) {
 		print("Compiling vendors...");
 		FILE* file = fopen("build/vendor/tiny_merged_vendors.c", "w");
 		if (!file) {
