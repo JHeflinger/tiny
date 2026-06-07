@@ -4,7 +4,7 @@
 */
 #define VERSION 1
 #define MAJOR_RELEASE 1
-#define MINOR_RELEASE 8
+#define MINOR_RELEASE 9
 
 #include <stdio.h>
 #include <time.h>
@@ -570,19 +570,27 @@ int functionimplline(const char* line) {
 	return 0;
 }
 
+int vardeclared(const char* line) {
+    if (strstr(line, "typedef ") == line) return 0;
+    int i = 0;
+    while (1) {
+        if (line[i] == ' ') return 1;
+        if (line[i] == '(' ||
+            line[i] == ')' ||
+            line[i] == '#' ||
+            line[i] == '{' ||
+            line[i] == '}') return 0;
+        i++;
+    }
+    return 0;
+}
+
 void easyc_audit(const char* file) {
 	int slen = strlen(file);
 	int header = (slen > 2 && (file[slen - 1] == 'h' && file[slen - 2] == '.'));
 	int source = (slen > 2 && (file[slen - 1] == 'c' && file[slen - 2] == '.'));
 	if (!header && !source) {
 		return;
-	}
-	int basename_ptr = 0;
-	for (int i = slen; i > 0; i--) {
-		if (file[i] == '/' || file[i] == '\\') {
-			basename_ptr = i + 1;
-			break;
-		}
 	}
 	FILE* fp = fopen(file, "r");
 	if (!fp) {
@@ -761,9 +769,9 @@ void syntax_audit(const char* file) {
 		if (source) {
             if (line[0] != 0 && line[0] != '\n' && line[0] != '\r' && line[0] != ' ' && line[0] != '\t') {
                 if (!strstr(line, "static") &&
-                    !strstr(line, "}") &&
-                    !strstr(line, "#")) {
-                    if (strstr(line, "=")) {
+                    !strstr(line, "#") &&
+                    !strstr(line, "(")) {
+                    if (strstr(line, "=") || vardeclared(line)) {
 						print("The global variable detected in \"%s\" on line %d is not translation protected - please make it static.", file, linecount);
 					    s_vulnerabilities++;
                     }
@@ -794,9 +802,7 @@ void syntax_audit(const char* file) {
                                     crash("Unable to open file");
                                 }
                                 char hline[PATHLEN * 2] = { 0 };
-                                int hlc = 0;
                                 while (fgets(hline, sizeof(hline), hfp)) {
-                                    hlc++;
                                     if (strstr(hline, implbuf)) {
                                         needs_static = 0;
                                         break;

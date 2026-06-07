@@ -1,6 +1,13 @@
 # Change Log
 All notable changes to this project will be documented in this file as of Tiny v1.0
 
+## Tiny 1.1.9
+
+### Fixed
+
+- Global variables initialized with brackets or are non-initialized are now detected if non-static
+- Reduced compile warnings
+
 ## Tiny 1.1.8
 
 ### Added
