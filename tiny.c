@@ -4,7 +4,7 @@
 */
 #define VERSION 1
 #define MAJOR_RELEASE 1
-#define MINOR_RELEASE 9
+#define MINOR_RELEASE 10
 
 #include <stdio.h>
 #include <time.h>
@@ -769,6 +769,7 @@ void syntax_audit(const char* file) {
 		if (source) {
             if (line[0] != 0 && line[0] != '\n' && line[0] != '\r' && line[0] != ' ' && line[0] != '\t') {
                 if (!strstr(line, "static") &&
+                    !strstr(line, "extern") &&
                     !strstr(line, "#") &&
                     !strstr(line, "(")) {
                     if (strstr(line, "=") || vardeclared(line)) {
