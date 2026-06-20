@@ -4,7 +4,7 @@
 */
 #define VERSION 1
 #define MAJOR_RELEASE 1
-#define MINOR_RELEASE 10
+#define MINOR_RELEASE 11
 
 #include <stdio.h>
 #include <time.h>
@@ -572,6 +572,7 @@ int functionimplline(const char* line) {
 
 int vardeclared(const char* line) {
     if (strstr(line, "typedef ") == line) return 0;
+    if (strstr(line, "{") && !strstr(line, "=")) return 0;
     int i = 0;
     while (1) {
         if (line[i] == ' ') return 1;
