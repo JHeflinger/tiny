@@ -4,7 +4,7 @@
 */
 #define VERSION 1
 #define MAJOR_RELEASE 1
-#define MINOR_RELEASE 11
+#define MINOR_RELEASE 12
 
 #include <stdio.h>
 #include <time.h>
@@ -772,7 +772,8 @@ void syntax_audit(const char* file) {
                 if (!strstr(line, "static") &&
                     !strstr(line, "extern") &&
                     !strstr(line, "#") &&
-                    !strstr(line, "(")) {
+                    !strstr(line, "(") &&
+                    !(strstr(line, "//") == line)) {
                     if (strstr(line, "=") || vardeclared(line)) {
 						print("The global variable detected in \"%s\" on line %d is not translation protected - please make it static.", file, linecount);
 					    s_vulnerabilities++;
