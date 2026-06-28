@@ -1,6 +1,12 @@
 # Change Log
 All notable changes to this project will be documented in this file as of Tiny v1.0
 
+## Tiny 1.1.13
+
+### Fixed
+
+- Fixed audit issue where functions were no longer being parsed for non-static properties
+
 ## Tiny 1.1.12
 
 ### Fixed
