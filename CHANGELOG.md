@@ -1,6 +1,12 @@
 # Change Log
 All notable changes to this project will be documented in this file as of Tiny v1.0
 
+## Tiny 1.1.14
+
+### Added
+
+- Tiny now supports multiple combined project directories, so if you define multiple they will be effectively merged during compilation
+
 ## Tiny 1.1.13
 
 ### Fixed

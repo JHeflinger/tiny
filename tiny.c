@@ -2,9 +2,10 @@
 * author: Jason Heflinger
 * description: Tiny GCC project manager
 */
+
 #define VERSION 1
 #define MAJOR_RELEASE 1
-#define MINOR_RELEASE 13
+#define MINOR_RELEASE 14
 
 #include <stdio.h>
 #include <time.h>
@@ -12,27 +13,72 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <stdint.h>
-
-#define print(...) {printf(__VA_ARGS__);printf("\n");}
-#define crash(...) {printf("\033[31m[ERROR]\033[0m "); print(__VA_ARGS__);exit(1);}
-#define warn(...) {printf("\033[33m[WARNING]\033[0m "); print(__VA_ARGS__);}
-#define PATHLEN 4096
-
-typedef void (*FileHandler)(const char*);
+#include <errno.h>
 
 #ifdef __linux__
 	#include <unistd.h>
 	#include <dirent.h>
 	#include <sys/time.h>
     #include <pthread.h>
+#elif __WIN32
+	#define WIN32_LEAN_AND_MEAN
+	#define NOGDICAPMASKS     // CC_*, LC_*, PC_*, CP_*, TC_*, RC_
+	#define NOVIRTUALKEYCODES // VK_*
+	#define NOWINMESSAGES     // WM_*, EM_*, LB_*, CB_*
+	#define NOWINSTYLES       // WS_*, CS_*, ES_*, LBS_*, SBS_*, CBS_*
+	#define NOSYSMETRICS      // SM_*
+	#define NOMENUS           // MF_*
+	#define NOICONS           // IDI_*
+	#define NOKEYSTATES       // MK_*
+	#define NOSYSCOMMANDS     // SC_*
+	#define NORASTEROPS       // Binary and Tertiary raster ops
+	#define NOSHOWWINDOW      // SW_*
+	#define OEMRESOURCE       // OEM Resource values
+	#define NOATOM            // Atom Manager routines
+	#define NOCLIPBOARD       // Clipboard routines
+	#define NOCOLOR           // Screen colors
+	#define NOCTLMGR          // Control and Dialog routines
+	#define NODRAWTEXT        // DrawText() and DT_*
+	#define NOGDI             // All GDI defines and routines
+	#define NOKERNEL          // All KERNEL defines and routines
+	#define NOUSER            // All USER defines and routines
+	#define NOMB              // MB_* and MessageBox()
+	#define NOMEMMGR          // GMEM_*, LMEM_*, GHND, LHND, associated routines
+	#define NOMETAFILE        // typedef METAFILEPICT
+	#define NOMSG             // typedef MSG and associated routines
+	#define NOOPENFILE        // OpenFile(), OemToAnsi, AnsiToOem, and OF_*
+	#define NOSCROLL          // SB_* and scrolling routines
+	#define NOSERVICE         // All Service Controller routines, SERVICE_ equates, etc.
+	#define NOSOUND           // Sound driver routines
+	#define NOTEXTMETRIC      // typedef TEXTMETRIC and associated routines
+	#define NOWH              // SetWindowsHook and WH_*
+	#define NOWINOFFSETS      // GWL_*, GCL_*, associated routines
+	#define NOCOMM            // COMM driver routines
+	#define NOKANJI           // Kanji support stuff.
+	#define NOHELP            // Help engine interface.
+	#define NOPROFILER        // Profiler interface.
+	#define NODEFERWINDOWPOS  // DeferWindowPos routines
+	#define NOMCX             // Modem Configuration Extensions
+	#include <direct.h>
+	#include <windows.h>
+#elif __APPLE__
+	#include <unistd.h>
+	#include <dirent.h>
+	#include <sys/time.h>
+	#include <pthread.h>
+	#include <limits.h>
+#else
+	#error "Unsupported operating system detected!"
+#endif
 
+#define print(...) {printf(__VA_ARGS__);printf("\n");}
+#define crash(...) {printf("\033[31m[ERROR]\033[0m "); print(__VA_ARGS__);exit(1);}
+#define warn(...) {printf("\033[33m[WARNING]\033[0m "); print(__VA_ARGS__);}
+#define PATHLEN 4096
+
+#ifdef __linux__
 	#define cwd(buffer) getcwd(buffer, sizeof(buffer))
 	#define makedir(dir) (!mkdir(dir, 0755))
-
-    typedef pthread_t TINY_THREAD;
-    typedef pthread_mutex_t TINY_MUTEX;
-    typedef pthread_cond_t TINY_COND;
-
     #define TINY_THREAD_RETURN_TYPE void*
     #define TINY_THREAD_PARAMETER_TYPE void*
     #define TINY_CREATE_THREAD(thread, func, parameters) pthread_create(&thread, NULL, (void* (*)(void*))func, parameters)
@@ -44,7 +90,160 @@ typedef void (*FileHandler)(const char*);
     #define TINY_WAIT_COND(cond, mutex) pthread_cond_wait(&cond, &mutex)
     #define TINY_SIGNAL_COND(cond) pthread_cond_signal(&cond)
     #define TINY_BROADCAST_COND(cond) pthread_cond_broadcast(&cond)
+#elif __WIN32
+	#define cwd(buffer) _getcwd(buffer, sizeof(buffer))
+	#define makedir(dir) (!_mkdir(dir))
+    #define TINY_THREAD_RETURN_TYPE DWORD WINAPI
+    #define TINY_THREAD_PARAMETER_TYPE LPVOID
+    #define TINY_CREATE_THREAD(thread, func, parameters) { thread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)func, (LPVOID)parameters, 0, NULL); }
+    #define TINY_WAIT_THREAD(thread) {WaitForSingleObject(thread, INFINITE); CloseHandle(thread);}
+    #define TINY_CREATE_MUTEX(mutex) InitializeCriticalSection(&mutex);
+    #define TINY_LOCK_MUTEX(mutex) EnterCriticalSection(&mutex)
+    #define TINY_RELEASE_MUTEX(mutex) LeaveCriticalSection(&mutex)
+    #define TINY_CREATE_COND(cond) InitializeConditionVariable(&cond);
+    #define TINY_WAIT_COND(cond, mutex) SleepConditionVariableCS(&cond, &mutex, INFINITE);
+    #define TINY_SIGNAL_COND(cond) WakeConditionVariable(&cond)
+    #define TINY_BROADCAST_COND(cond) WakeAllConditionVariable(&cond)
+#elif __APPLE__
+	#define cwd(buffer) getcwd(buffer, sizeof(buffer))
+	#define makedir(dir) (!mkdir(dir, 0755))
+	#define TINY_THREAD_RETURN_TYPE void*
+	#define TINY_THREAD_PARAMETER_TYPE void*
+	#define TINY_CREATE_THREAD(thread, func, parameters) pthread_create(&thread, NULL, (void* (*)(void*))func, parameters)
+	#define TINY_WAIT_THREAD(thread) pthread_join(thread, NULL)
+	#define TINY_CREATE_MUTEX(mutex) pthread_mutex_init(&mutex, NULL);
+	#define TINY_LOCK_MUTEX(mutex) pthread_mutex_lock(&mutex)
+	#define TINY_RELEASE_MUTEX(mutex) pthread_mutex_unlock(&mutex)
+	#define TINY_CREATE_COND(cond) pthread_cond_init(&cond, NULL);
+	#define TINY_WAIT_COND(cond, mutex) pthread_cond_wait(&cond, &mutex)
+	#define TINY_SIGNAL_COND(cond) pthread_cond_signal(&cond)
+	#define TINY_BROADCAST_COND(cond) pthread_cond_broadcast(&cond)
+#else
+	#error "Unsupported operating system detected!"
+#endif
 
+typedef void (*FileHandler)(const char*);
+
+typedef enum {
+	NONE = 0,
+	PROD = 1 << 0,
+	AUDIT = 1 << 1,
+    FAST = 1 << 2,
+    DEBUG = 1 << 3,
+    RECOMPILE_VENDORS = 1 << 4,
+} BuildFlags;
+
+typedef struct {
+	char str[PATHLEN];
+	void* next;
+} PathList;
+
+typedef struct {
+	char header[PATHLEN];
+	PathList* links;
+	PathList* secondaries;
+} HeaderLink;
+
+typedef struct {
+	HeaderLink* link;
+	void* next;
+} HeaderLinkList;
+
+typedef struct {
+    char* command;
+    char destination[PATHLEN];
+    char file[PATHLEN];
+    int index;
+    int basename_ptr;
+    int sourcei;
+} ThreadParameters;
+
+#ifdef __linux__
+    typedef pthread_t TINY_THREAD;
+    typedef pthread_mutex_t TINY_MUTEX;
+    typedef pthread_cond_t TINY_COND;
+#elif __WIN32
+    typedef HANDLE TINY_THREAD;
+    typedef CRITICAL_SECTION TINY_MUTEX;
+    typedef CONDITION_VARIABLE TINY_COND;
+#elif __APPLE__
+	typedef pthread_t TINY_THREAD;
+	typedef pthread_mutex_t TINY_MUTEX;
+	typedef pthread_cond_t TINY_COND;
+#else
+	#error "Unsupported operating system detected!"
+#endif
+
+int rmakedir(const char* dir);
+int threadcount();
+int dexists(const char* dir);
+int fexists(const char* file);
+void walkdir(const char* path, FileHandler func);
+void walkfiles(const char* path, FileHandler func);
+uint64_t mtime();
+void pathlist_add(PathList** list, const char* path);
+void pathlist_delete(PathList* list);
+size_t pathlist_len(PathList* list);
+void pathlist_construct(PathList* list, char* output);
+void clean_header_links();
+void clean_source_links();
+int header_link_exists(const char* header);
+void add_header_link(const char* header, const char* link);
+void add_source_link(const char* header, const char* link);
+void add_header_secondary(const char* header, const char* link);
+int functionline(const char* line);
+int functionimplline(const char* line);
+int vardeclared(const char* line);
+void easyc_audit(const char* file);
+void syntax_audit(const char* file);
+void copyfile(const char* src, const char* dst);
+int filecmp(const char* path1, const char* path2);
+void affirmdir(const char* dir);
+void affirm_to_cache(const char* dir);
+void add_to_sources(const char* file);
+void verify_header(const char* file);
+void accumulate_header(const char* file);
+void async_compile_progress_update(int index, int action, const char* name);
+void async_compile(void* params);
+void compile_source(const char* file);
+void parseflag(char* flag, int blacklistable);
+void initialize(int argc, char* argv[]);
+void add_vendors();
+void compile_vendors();
+void calculate_dependencies();
+void compile_objects();
+void compile_executable();
+void get_in_depth_headers(const char* dive_header, HeaderLinkList* update_header);
+void audit();
+
+size_t s_start_time = 0;
+BuildFlags s_flags = NONE;
+BuildFlags s_unflags = NONE;
+char s_main_file_name[PATHLEN];
+int s_found_main = 0;
+int s_sources_up_to_date = 1;
+int s_main_up_to_date = 1;
+int s_vulnerabilities = 0;
+char s_main_file_path[PATHLEN] = { 0 };
+char s_cwd[PATHLEN] = { 0 };
+PathList* s_projects = NULL;
+PathList* s_includes = NULL;
+PathList* s_links = NULL;
+PathList* s_raws = NULL;
+PathList* s_defines = NULL;
+PathList* s_libs = NULL;
+PathList* s_sources = NULL;
+PathList* s_objects = NULL;
+PathList* s_changed_headers = NULL;
+HeaderLinkList* s_header_links = NULL;
+HeaderLinkList* s_source_links = NULL;
+TINY_THREAD* s_threads = NULL;
+int* s_active_threads = NULL;
+TINY_MUTEX s_mutex;
+int s_sourcei = 0;
+int s_easymemory_detected = 0;
+
+#ifdef __linux__
     int threadcount() {
         return (int)sysconf(_SC_NPROCESSORS_ONLN);
     }
@@ -116,67 +315,6 @@ typedef void (*FileHandler)(const char*);
 		return (uint64_t)(tv.tv_sec) * 1000 + (tv.tv_usec) / 1000;
 	}
 #elif __WIN32
-	#define WIN32_LEAN_AND_MEAN
-	#define NOGDICAPMASKS     // CC_*, LC_*, PC_*, CP_*, TC_*, RC_
-	#define NOVIRTUALKEYCODES // VK_*
-	#define NOWINMESSAGES     // WM_*, EM_*, LB_*, CB_*
-	#define NOWINSTYLES       // WS_*, CS_*, ES_*, LBS_*, SBS_*, CBS_*
-	#define NOSYSMETRICS      // SM_*
-	#define NOMENUS           // MF_*
-	#define NOICONS           // IDI_*
-	#define NOKEYSTATES       // MK_*
-	#define NOSYSCOMMANDS     // SC_*
-	#define NORASTEROPS       // Binary and Tertiary raster ops
-	#define NOSHOWWINDOW      // SW_*
-	#define OEMRESOURCE       // OEM Resource values
-	#define NOATOM            // Atom Manager routines
-	#define NOCLIPBOARD       // Clipboard routines
-	#define NOCOLOR           // Screen colors
-	#define NOCTLMGR          // Control and Dialog routines
-	#define NODRAWTEXT        // DrawText() and DT_*
-	#define NOGDI             // All GDI defines and routines
-	#define NOKERNEL          // All KERNEL defines and routines
-	#define NOUSER            // All USER defines and routines
-	#define NOMB              // MB_* and MessageBox()
-	#define NOMEMMGR          // GMEM_*, LMEM_*, GHND, LHND, associated routines
-	#define NOMETAFILE        // typedef METAFILEPICT
-	#define NOMSG             // typedef MSG and associated routines
-	#define NOOPENFILE        // OpenFile(), OemToAnsi, AnsiToOem, and OF_*
-	#define NOSCROLL          // SB_* and scrolling routines
-	#define NOSERVICE         // All Service Controller routines, SERVICE_ equates, etc.
-	#define NOSOUND           // Sound driver routines
-	#define NOTEXTMETRIC      // typedef TEXTMETRIC and associated routines
-	#define NOWH              // SetWindowsHook and WH_*
-	#define NOWINOFFSETS      // GWL_*, GCL_*, associated routines
-	#define NOCOMM            // COMM driver routines
-	#define NOKANJI           // Kanji support stuff.
-	#define NOHELP            // Help engine interface.
-	#define NOPROFILER        // Profiler interface.
-	#define NODEFERWINDOWPOS  // DeferWindowPos routines
-	#define NOMCX             // Modem Configuration Extensions
-
-	#include <direct.h>
-	#include <windows.h>
-
-	#define cwd(buffer) _getcwd(buffer, sizeof(buffer))
-	#define makedir(dir) (!_mkdir(dir))
-
-    typedef HANDLE TINY_THREAD;
-    typedef CRITICAL_SECTION TINY_MUTEX;
-    typedef CONDITION_VARIABLE TINY_COND;
-
-    #define TINY_THREAD_RETURN_TYPE DWORD WINAPI
-    #define TINY_THREAD_PARAMETER_TYPE LPVOID
-    #define TINY_CREATE_THREAD(thread, func, parameters) { thread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)func, (LPVOID)parameters, 0, NULL); }
-    #define TINY_WAIT_THREAD(thread) {WaitForSingleObject(thread, INFINITE); CloseHandle(thread);}
-    #define TINY_CREATE_MUTEX(mutex) InitializeCriticalSection(&mutex);
-    #define TINY_LOCK_MUTEX(mutex) EnterCriticalSection(&mutex)
-    #define TINY_RELEASE_MUTEX(mutex) LeaveCriticalSection(&mutex)
-    #define TINY_CREATE_COND(cond) InitializeConditionVariable(&cond);
-    #define TINY_WAIT_COND(cond, mutex) SleepConditionVariableCS(&cond, &mutex, INFINITE);
-    #define TINY_SIGNAL_COND(cond) WakeConditionVariable(&cond)
-    #define TINY_BROADCAST_COND(cond) WakeAllConditionVariable(&cond)
-
     int threadcount() {
         SYSTEM_INFO sysinfo;
         GetSystemInfo(&sysinfo);
@@ -246,31 +384,6 @@ typedef void (*FileHandler)(const char*);
 		return (uint64_t)GetTickCount64();
 	}
 #elif __APPLE__
-	#include <unistd.h>
-	#include <dirent.h>
-	#include <sys/time.h>
-	#include <pthread.h>
-	#include <limits.h>
-
-	#define cwd(buffer) getcwd(buffer, sizeof(buffer))
-	#define makedir(dir) (!mkdir(dir, 0755))
-
-	typedef pthread_t TINY_THREAD;
-	typedef pthread_mutex_t TINY_MUTEX;
-	typedef pthread_cond_t TINY_COND;
-
-	#define TINY_THREAD_RETURN_TYPE void*
-	#define TINY_THREAD_PARAMETER_TYPE void*
-	#define TINY_CREATE_THREAD(thread, func, parameters) pthread_create(&thread, NULL, (void* (*)(void*))func, parameters)
-	#define TINY_WAIT_THREAD(thread) pthread_join(thread, NULL)
-	#define TINY_CREATE_MUTEX(mutex) pthread_mutex_init(&mutex, NULL);
-	#define TINY_LOCK_MUTEX(mutex) pthread_mutex_lock(&mutex)
-	#define TINY_RELEASE_MUTEX(mutex) pthread_mutex_unlock(&mutex)
-	#define TINY_CREATE_COND(cond) pthread_cond_init(&cond, NULL);
-	#define TINY_WAIT_COND(cond, mutex) pthread_cond_wait(&cond, &mutex)
-	#define TINY_SIGNAL_COND(cond) pthread_cond_signal(&cond)
-	#define TINY_BROADCAST_COND(cond) pthread_cond_broadcast(&cond)
-
 	int threadcount() {
 		return (int)sysconf(_SC_NPROCESSORS_ONLN);
 	}
@@ -345,66 +458,26 @@ typedef void (*FileHandler)(const char*);
 	#error "Unsupported operating system detected!"
 #endif
 
-typedef enum {
-	NONE = 0,
-	PROD = 1 << 0,
-	AUDIT = 1 << 1,
-    FAST = 1 << 2,
-    DEBUG = 1 << 3,
-    RECOMPILE_VENDORS = 1 << 4,
-} BuildFlags;
-
-typedef struct {
-	char str[PATHLEN];
-	void* next;
-} PathList;
-
-typedef struct {
-	char header[PATHLEN];
-	PathList* links;
-	PathList* secondaries;
-} HeaderLink;
-
-typedef struct {
-	HeaderLink* link;
-	void* next;
-} HeaderLinkList;
-
-typedef struct {
-    char* command;
-    char destination[PATHLEN];
-    char file[PATHLEN];
-    int index;
-    int basename_ptr;
-    int sourcei;
-} ThreadParameters;
-
-size_t s_start_time = 0;
-BuildFlags s_flags = NONE;
-BuildFlags s_unflags = NONE;
-char s_project_directory[PATHLEN];
-char s_main_file_name[PATHLEN];
-int s_found_main = 0;
-int s_sources_up_to_date = 1;
-int s_main_up_to_date = 1;
-int s_vulnerabilities = 0;
-char s_main_file_path[PATHLEN] = { 0 };
-char s_cwd[PATHLEN] = { 0 };
-PathList* s_includes = NULL;
-PathList* s_links = NULL;
-PathList* s_raws = NULL;
-PathList* s_defines = NULL;
-PathList* s_libs = NULL;
-PathList* s_sources = NULL;
-PathList* s_objects = NULL;
-PathList* s_changed_headers = NULL;
-HeaderLinkList* s_header_links = NULL;
-HeaderLinkList* s_source_links = NULL;
-TINY_THREAD* s_threads = NULL;
-int* s_active_threads = NULL;
-TINY_MUTEX s_mutex;
-int s_sourcei = 0;
-int s_easymemory_detected = 0;
+int rmakedir(const char* dir) {
+    char *p = strdup(dir);
+    if (!p) return 0;
+    for (char *s = p + 1; *s; s++) {
+        if (*s == '/') {
+            *s = '\0';
+            if (makedir(p) != 0 && errno != EEXIST) {
+                free(p);
+                return 0;
+            }
+            *s = '/';
+        }
+    }
+    if (makedir(p) != 0 && errno != EEXIST) {
+        free(p);
+        return 0;
+    }
+    free(p);
+    return 1;
+}
 
 void pathlist_add(PathList** list, const char* path) {
 	PathList* new = calloc(1, sizeof(PathList));
@@ -909,7 +982,7 @@ int filecmp(const char* path1, const char* path2) {
 }
 
 void affirmdir(const char* dir) {
-	if (!dexists(dir) && !makedir(dir)) {
+	if (!dexists(dir) && !rmakedir(dir)) {
         crash("Unable to affirm directory %s", dir);
     }
 }
@@ -1208,7 +1281,6 @@ void initialize(int argc, char* argv[]) {
 	}
 
 	// initialize project and main dir and file
-	strcpy(s_project_directory, "src");
 	strcpy(s_main_file_name, "main.c");
 	if (fexists(".tinyconf")) {
 		FILE* file = fopen(".tinyconf", "r");
@@ -1234,7 +1306,7 @@ void initialize(int argc, char* argv[]) {
 				}
 			}
 			if (strcmp(precursor, "PROJECT") == 0) {
-				strcpy(s_project_directory, line + postcursor);
+                pathlist_add(&s_projects, line + postcursor);
 			} else if (strcmp(precursor, "MAIN") == 0) {
 				strcpy(s_main_file_name, line + postcursor);
 			}
@@ -1242,25 +1314,38 @@ void initialize(int argc, char* argv[]) {
 		fclose(file);
 	}
 
-	// ensure project directory exists
-	if (!dexists(s_project_directory)) {
-		crash("Project directory \"%s/\" does not exist - if this is not your desired location, please specify a different one in \".tinyconf\"", s_project_directory);
+    // default project directory
+    if (s_projects == NULL) {
+        pathlist_add(&s_projects, "src");
     }
 
-	// set up build directories
+    // set up build directories
 	affirmdir("build");
 	affirmdir("build/cache");
 	affirmdir("build/vendor");
-	char tbuf[PATHLEN + 12] = { 0 };
-	snprintf(tbuf, PATHLEN + 12, "build/cache/%s", s_project_directory);
-	affirmdir(tbuf);
 
-	// set up cache folders
-	walkdir(s_project_directory, affirm_to_cache);
+    // set up project directories
+    PathList* curr = s_projects;
+	while (curr != NULL) {
+	    // ensure project directory exists
+	    if (!dexists(curr->str)) {
+		    crash("Project directory \"%s/\" does not exist - if this is not your desired location, please specify a different one in \".tinyconf\"", curr->str);
+        }
 
-	// set include dir
-	snprintf(tbuf, PATHLEN + 12, "-I\"%s\"", s_project_directory);
-	pathlist_add(&s_includes, tbuf);
+        // set up build directories
+	    char tbuf[PATHLEN + 12] = { 0 };
+	    snprintf(tbuf, PATHLEN + 12, "build/cache/%s", curr->str);
+	    affirmdir(tbuf);
+
+        // set up cache folders
+	    walkdir(curr->str, affirm_to_cache);
+
+        // set up include directories
+	    snprintf(tbuf, PATHLEN + 12, "-I\"%s\"", curr->str);
+	    pathlist_add(&s_includes, tbuf);
+
+		curr = (PathList*)curr->next;
+	}
 }
 
 void add_vendors() {
@@ -1441,14 +1526,22 @@ void compile_vendors() {
 void calculate_dependencies() {
 	print("Calculating dependency tree...");
 	uint64_t timer = mtime();
-	walkfiles(s_project_directory, verify_header);
+    PathList* curr = s_projects;
+	while (curr != NULL) {
+	    walkfiles(curr->str, verify_header);
+		curr = (PathList*)curr->next;
+	}
 	if (s_changed_headers == NULL) {
 		print("\033[1A\033[0KHeaders are currently \033[32mup to date\033[0m");
 		return;
 	}
 	while (1) {
 		PathList* current = s_changed_headers;
-		walkfiles(s_project_directory, accumulate_header);
+        PathList* currproj = s_projects;
+	    while (currproj != NULL) {
+	        walkfiles(currproj->str, accumulate_header);
+		    currproj = (PathList*)currproj->next;
+	    }
 		if (current == s_changed_headers) break;
 	}
 	timer = mtime() - timer;
@@ -1478,7 +1571,11 @@ void compile_objects() {
 			s_main_up_to_date = 0;
 		}
 	}
-	walkfiles(s_project_directory, compile_source);
+    PathList* curr = s_projects;
+	while (curr != NULL) {
+	    walkfiles(curr->str, compile_source);
+		curr = (PathList*)curr->next;
+	}
     if (s_flags & FAST) {
         while (1) {
             int all_done = 1;
@@ -1577,7 +1674,11 @@ void get_in_depth_headers(const char* dive_header, HeaderLinkList* update_header
 void audit() {
 	print("Auditing project...")
 	uint64_t timer = mtime();
-	walkfiles(s_project_directory, syntax_audit);
+    PathList* currproj = s_projects;
+	while (currproj != NULL) {
+	    walkfiles(currproj->str, syntax_audit);
+		currproj = (PathList*)currproj->next;
+	}
 	HeaderLinkList* header = s_header_links;
 	while (header) {
 		PathList* primary = header->link->links;
@@ -1640,7 +1741,13 @@ void audit() {
 		}
 		source = (HeaderLinkList*)source->next;
 	}
-    if (s_easymemory_detected) walkfiles(s_project_directory, easyc_audit);
+    if (s_easymemory_detected) {
+        PathList* curr = s_projects;
+    	while (curr != NULL) {
+            walkfiles(curr->str, easyc_audit);
+		    curr = (PathList*)curr->next;
+	    }
+    }
 
 	timer = mtime() - timer;
 	int hours = (int)(timer / 3600000);
@@ -1672,6 +1779,7 @@ int main(int argc, char* argv[]) {
     pathlist_delete(s_defines);
 	pathlist_delete(s_libs);
     pathlist_delete(s_raws);
+    pathlist_delete(s_projects);
 	s_start_time = mtime() - s_start_time;
 	int hours = (int)(s_start_time / 3600000);
 	int minutes = (int)((s_start_time - (hours * 3600000)) / 60000);

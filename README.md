@@ -35,8 +35,8 @@ To configure Tiny to be a bit more accustomed to your use, make a `.tinyconf` fi
 
 | Precursor | Value | Description |
 | --------- | ----- | ----------- |
-| PROJECT | <path_to_directory> | This is where your project files that you will be working with should be located! All your `.c` and `.h` files should be here. |
-| MAIN | <file_name> | This is what file you have the main function in. It can be the name of your main file, or the direct path to it! |
+| PROJECT | <path_to_directory> | This is where your project files that you will be working with should be located! All your `.c` and `.h` files should be here. If you have multiple of these, you can add them all and they'll all be combined during compilation! |
+| MAIN | <file_name> | This is what file you have the main function in. It should be the name of your main file. |
 | INCLUDE | <path_to_directory> | This is where you can define directories of files you want included in your available headers of your project. If you have third party vendors, define those here! |
 | LINK | <link_argument> | This is where you can define what you want to link into your program, such as OpenGL or pthreads |
 | LIB | <path_to_directory> | If you have libraries that you want to link that aren't on your path, enter the path to those libraries here! |
