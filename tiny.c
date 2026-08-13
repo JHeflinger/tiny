@@ -5,7 +5,7 @@
 
 #define VERSION 1
 #define MAJOR_RELEASE 2
-#define MINOR_RELEASE 0
+#define MINOR_RELEASE 1
 
 #include <stdio.h>
 #include <time.h>
@@ -813,6 +813,7 @@ void download_module(const char* name, const char* url, const char* path) {
         rmtree(tmpdir);
     }
     affirmdir(tmpdir);
+    affirmdir("build/modules");
     char* q_url = generate_quote(url);
     char* q_tmp = generate_quote(tmpdir);
     char* q_folder = generate_quote(folder);
@@ -839,7 +840,6 @@ void download_module(const char* name, const char* url, const char* path) {
     }
     char dest_path[PATHLEN] = { 0 };
     snprintf(dest_path, sizeof(dest_path), "build/modules/%s", name);
-    affirmdir(dest_path);
     if (!copytree(src_path, dest_path)) {
         crash("Failed to copy over module-critical data for module \"%s\"", name);
     }
@@ -1071,7 +1071,7 @@ int vardeclared(const char* line) {
 }
 
 void easyc_audit(const char* file) {
-    if (strstr(file, "build") == &(file[0]) || strstr(file, "./build") == &(file[0])) return;
+    if (strstr(file, "build/cache") == &(file[0]) || strstr(file, "./build/cache") == &(file[0])) return;
     int slen = strlen(file);
     int header = (slen > 2 && (file[slen - 1] == 'h' && file[slen - 2] == '.'));
     int source = (slen > 2 && (file[slen - 1] == 'c' && file[slen - 2] == '.'));
@@ -1095,7 +1095,7 @@ void easyc_audit(const char* file) {
 }
 
 void syntax_audit(const char* file) {
-    if (strstr(file, "build") == &(file[0]) || strstr(file, "./build") == &(file[0])) return;
+    if (strstr(file, "build/cache") == &(file[0]) || strstr(file, "./build/cache") == &(file[0])) return;
     int slen = strlen(file);
     int header = (slen > 2 && (file[slen - 1] == 'h' && file[slen - 2] == '.'));
     int source = (slen > 2 && (file[slen - 1] == 'c' && file[slen - 2] == '.'));
@@ -1401,21 +1401,21 @@ void affirmdir(const char* dir) {
 }
 
 void affirm_to_cache(const char* dir) {
-    if (strstr(dir, "build") == &(dir[0]) || strstr(dir, "./build") == &(dir[0])) return;
+    if (strstr(dir, "build/cache") == &(dir[0]) || strstr(dir, "./build/cache") == &(dir[0])) return;
     char buffer[PATHLEN] = { 0 };
     snprintf(buffer, PATHLEN, "build/cache/%s", dir);
     affirmdir(buffer);
 }
 
 void add_to_sources(const char* file) {
-    if (strstr(file, "build") == &(file[0]) || strstr(file, "./build") == &(file[0])) return;
+    if (strstr(file, "build/cache") == &(file[0]) || strstr(file, "./build/cache") == &(file[0])) return;
     size_t slen = strlen(file);
     if (slen > 2 && file[slen - 1] == 'c' && file[slen - 2] == '.')
         pathlist_add(&s_sources, file);
 }
 
 void verify_header(const char* file) {
-    if (strstr(file, "build") == &(file[0]) || strstr(file, "./build") == &(file[0])) return;
+    if (strstr(file, "build/cache") == &(file[0]) || strstr(file, "./build/cache") == &(file[0])) return;
     size_t slen = strlen(file);
     if (slen > 2 && (file[slen - 1] != 'h' || file[slen - 2] != '.')) return;
     int basename_ptr = 0;
@@ -1439,7 +1439,7 @@ void verify_header(const char* file) {
 }
 
 void accumulate_header(const char* file) {
-    if (strstr(file, "build") == &(file[0]) || strstr(file, "./build") == &(file[0])) return;
+    if (strstr(file, "build/cache") == &(file[0]) || strstr(file, "./build/cache") == &(file[0])) return;
     size_t slen = strlen(file);
     if (slen > 2 && (file[slen - 1] != 'h' || file[slen - 2] != '.')) return;
     int basename_ptr = 0;
@@ -1505,7 +1505,7 @@ void async_compile(void* params) {
 }
 
 void compile_source(const char* file) {
-    if (strstr(file, "build") == &(file[0]) || strstr(file, "./build") == &(file[0])) return;
+    if (strstr(file, "build/cache") == &(file[0]) || strstr(file, "./build/cache") == &(file[0])) return;
     size_t slen = strlen(file);
     if (slen > 2 && (file[slen - 1] != 'c' || file[slen - 2] != '.')) return;
     int basename_ptr = 0;
@@ -1850,6 +1850,9 @@ void configure(const char* prepath, const char* path) {
         } else {
             warn("Unknown precursor \"%s\" detected on line %d of \".tinyconf\" - skipping", precursor, linecount);
         }
+        memset(line, 0, PATHLEN * 2);
+        memset(precursor, 0, PATHLEN);
+        memset(workbuffer, 0, PATHLEN);
     }
     fclose(file);
 }

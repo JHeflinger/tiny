@@ -1,6 +1,13 @@
 # Change Log
 All notable changes to this project will be documented in this file as of Tiny v1.0
 
+## Tiny 1.2.1
+
+### Fixed
+
+- Fixed module downloading into a nested copy
+- Fixed module ignoring due to build folder
+
 ## Tiny 1.2.0
 
 ### Added
