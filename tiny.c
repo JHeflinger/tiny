@@ -111,6 +111,7 @@
     #define TINY_SIGNAL_COND(cond) WakeConditionVariable(&cond)
     #define TINY_BROADCAST_COND(cond) WakeAllConditionVariable(&cond)
 #elif __APPLE__
+    #define PATH_SEP '/'
     #define cwd(buffer) getcwd(buffer, sizeof(buffer))
     #define makedir(dir) (!mkdir(dir, 0755))
     #define TINY_THREAD_RETURN_TYPE void*

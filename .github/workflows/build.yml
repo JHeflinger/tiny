@@ -13,7 +13,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build
-        run: gcc tiny.c -pthread -o tiny_linux.bin
+        run: gcc tiny.c -O2 -pthread -o tiny_linux.bin
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -29,7 +29,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build
-        run: gcc tiny.c -pthread -o tiny_macos.bin
+        run: gcc tiny.c -O2 -pthread -o tiny_macos.bin
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -55,7 +55,7 @@ jobs:
           install: mingw-w64-x86_64-gcc
 
       - name: Build
-        run: gcc tiny.c -o tiny_windows.exe
+        run: gcc tiny.c -O2 -o tiny_windows.exe
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
