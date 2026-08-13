@@ -41,9 +41,11 @@ To configure Tiny to be a bit more accustomed to your use, make a `.tinyconf` fi
 | LINK | <link_argument> | This is where you can define what you want to link into your program, such as OpenGL or pthreads |
 | LIB | <path_to_directory> | If you have libraries that you want to link that aren't on your path, enter the path to those libraries here! |
 | SOURCE | <path_to_directory_or_file> | Here you can define outside sources to include into your project. If you have third party vendors with `.c` files, include those here! You can provide the path to a singular file, or a directory of sources, whichever works best for you! |
-| FLAG | <flag> | Here you can add one of the flags later mentioned to configure your build |
-| DEFINE | <definition> | Here you can add a compile definition to configure your build |
+| FLAG | <tiny_flag> | Here you can add one of the flags later mentioned to configure your build |
+| DEFINE | <macro_definition> | Here you can add a compile definition to configure your build |
 | RAW | <raw_arg> | Here you can pass a raw argument to gcc |
+| MODULE | <module_name> <git_link> <internal_path> | Here you can link a tiny module that will automatically download and include into your project with zero hassle! |
+| PORT | <path_to_directory> | Here you can symbolicly link folders into the tiny build/run environment - this is great for assets! |
 
 Additionally, you can also preface each configuration line with an operating system to use it exclusively on that operating system build! Some example usage of this feature may look like the following:
 
@@ -81,7 +83,13 @@ There are also some various flags you can add to customize your build process! Y
 | -f | compiles in parallel |
 | -d | outputs compiled command buffer |
 | -rv | recompiles vendors as well |
+| -r | runs the built executable upon success from the `build/env/` folder - any following arguments will be forwarded to the executable |
+| -c | cleans the cache (if you want a full cleanbuild, just delete the entire `build` folder!) |
 
 ## OUTPUT
 
 Tiny compiles your executable into a build/program.exe file. So once your build completes, run it from there. Happy building!
+
+## MODULES
+
+As of Tiny 1.2, Tiny also supports modules! This means you can define a .tinymodule file in a github repository, which can then contain your configuration for your tiny project. If another tiny project references this location with a MODULE property, then it will get automatically downloaded, and the .tinymodule will be appended to their configuration! This supports recursive submodules too! And not to worry, the relative location of the module will be prepended to all the relevant .tinymodule property locations, so just treat it as the root directory!

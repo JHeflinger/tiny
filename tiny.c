@@ -4,8 +4,8 @@
 */
 
 #define VERSION 1
-#define MAJOR_RELEASE 1
-#define MINOR_RELEASE 14
+#define MAJOR_RELEASE 2
+#define MINOR_RELEASE 0
 
 #include <stdio.h>
 #include <time.h>
@@ -16,10 +16,12 @@
 #include <errno.h>
 
 #ifdef __linux__
+    #include <sys/time.h>
+    #include <sys/types.h>
+    #include <sys/wait.h>
+    #include <pthread.h>
     #include <unistd.h>
     #include <dirent.h>
-    #include <sys/time.h>
-    #include <pthread.h>
 #elif __WIN32
     #define WIN32_LEAN_AND_MEAN
     #define NOGDICAPMASKS     // CC_*, LC_*, PC_*, CP_*, TC_*, RC_
@@ -62,11 +64,13 @@
     #include <windows.h>
     #include <direct.h>
 #elif __APPLE__
-    #include <unistd.h>
-    #include <dirent.h>
     #include <sys/time.h>
+    #include <sys/types.h>
+    #include <sys/wait.h>
     #include <pthread.h>
     #include <limits.h>
+    #include <unistd.h>
+    #include <dirent.h>
 #else
     #error "Unsupported operating system detected!"
 #endif
@@ -133,6 +137,8 @@ typedef enum {
     FAST = 1 << 2,
     DEBUG = 1 << 3,
     RECOMPILE_VENDORS = 1 << 4,
+    RUN = 1 << 5,
+    CLEAN = 1 << 6
 } BuildFlags;
 
 typedef struct {
@@ -188,6 +194,7 @@ typedef struct {
     #error "Unsupported operating system detected!"
 #endif
 
+void run_build();
 int make_symlink(const char* src, const char* dest);
 int copytree(const char* src, const char* dest);
 void rmtree(const char* path);
@@ -270,8 +277,31 @@ TINY_MUTEX s_mutex;
 int s_sourcei = 0;
 int s_easymemory_detected = 0;
 ModuleList* s_modules = NULL;
+char** s_copy_argsv = NULL;
+int s_copy_argsc = 0;
+int s_max_argsc = 0;
 
 #ifdef __linux__
+    void run_build() {
+        affirmdir("build/env");
+        pid_t pid = fork();
+        if (pid < 0) {
+            crash("Fork error");
+        }
+        if (pid == 0) {
+            if (chdir("build/env") != 0) {
+                crash("Unable to enter build environment");
+            }
+            s_copy_argsv[s_copy_argsc] = NULL;
+            execv("../bin.exe", s_copy_argsv);
+            crash("Unable to run executable");
+        }
+        int status;
+        if (waitpid(pid, &status, 0) < 0) {
+            crash("Unable to wait on executable cleanup");
+        }
+    }
+
     int make_symlink(const char* src, const char* dest) {
         return symlink(src, dest) == 0;
     }
@@ -396,6 +426,23 @@ ModuleList* s_modules = NULL;
         return (uint64_t)(tv.tv_sec) * 1000 + (tv.tv_usec) / 1000;
     }
 #elif __WIN32
+    void run_build() {
+        affirmdir("build/env");
+        char command_line[PATHLEN * 2] = { 0 };
+        int offset = 0;
+        for (int i = 0; i < s_copy_argsc; i++) {
+            offset += snprintf(command_line + offset, sizeof(command_line) - offset, "\"%s\"%c", s_copy_argsv[i], i == s_copy_argsc - 1 ? '\0' : ' ');
+        }
+        STARTUPINFOA si = { 0 };
+        PROCESS_INFORMATION pi = { 0 };
+        si.cb = sizeof(si);
+        if (!CreateProcessA(NULL, command_line, NULL, NULL, FALSE, 0, NULL, "build/env", &si, &pi)) {
+            crash("CreateProcess failed");
+        }
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+    }
+
     int make_symlink(const char* src, const char* dest) {
         DWORD flags = SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE;
         DWORD attrs = GetFileAttributesA(src);
@@ -527,6 +574,26 @@ ModuleList* s_modules = NULL;
         return (uint64_t)GetTickCount64();
     }
 #elif __APPLE__
+    void run_build() {
+        affirmdir("build/env");
+        pid_t pid = fork();
+        if (pid < 0) {
+            crash("Fork error");
+        }
+        if (pid == 0) {
+            if (chdir("build/env") != 0) {
+                crash("Unable to enter build environment");
+            }
+            s_copy_argsv[s_copy_argsc] = NULL;
+            execv("../bin.exe", s_copy_argsv);
+            crash("Unable to run executable");
+        }
+        int status;
+        if (waitpid(pid, &status, 0) < 0) {
+            crash("Unable to wait on executable cleanup");
+        }
+    }
+
     int make_symlink(const char* src, const char* dest) {
         return symlink(src, dest) == 0;
     }
@@ -1562,6 +1629,12 @@ void compile_source(const char* file) {
 }
 
 void parseflag(char* flag, int blacklistable) {
+    if (s_flags & RUN) {
+        s_copy_argsv[s_copy_argsc] = calloc(strlen(flag) + 1, sizeof(char));
+        strcpy(s_copy_argsv[s_copy_argsc], flag);
+        s_copy_argsc++;
+        return;
+    }
     char buffer[PATHLEN] = { 0 };
     int whitelist = 1;
     if (blacklistable) {
@@ -1610,9 +1683,40 @@ void parseflag(char* flag, int blacklistable) {
             s_unflags |= FAST;
         }
     } else if (strcmp("-d", buffer) == 0 || strcmp("-debug", buffer) == 0) {
-        s_flags |= DEBUG;
+        if (whitelist && !(s_unflags & DEBUG)) {
+            s_flags |= DEBUG;
+        } else {
+            s_unflags |= DEBUG;
+        }
     } else if (strcmp("-rv", buffer) == 0 || strcmp("-recompile_vendors", buffer) == 0) {
-        s_flags |= RECOMPILE_VENDORS;
+        if (whitelist && !(s_unflags & RECOMPILE_VENDORS)) {
+            s_flags |= RECOMPILE_VENDORS;
+        } else {
+            s_unflags |= RECOMPILE_VENDORS;
+        }
+    } else if (strcmp("-r", buffer) == 0 || strcmp("-run", buffer) == 0) {
+        if (whitelist && !(s_unflags & RUN)) {
+            s_copy_argsv = calloc(s_max_argsc, sizeof(char*));
+            s_copy_argsc = 1;
+            s_copy_argsv[0] = calloc(strlen("bin.exe") + 1, sizeof(char));
+            strcpy(s_copy_argsv[0], "bin.exe");
+            s_flags |= RUN;
+        } else {
+            s_unflags |= RUN;
+        }
+    } else if (strcmp("-c", buffer) == 0 || strcmp("-clean", buffer) == 0) {
+        if (whitelist && !(s_unflags & CLEAN)) {
+            if (dexists("build/cache")) {
+                print("Cleaning cache...");
+                rmtree("build/cache");
+                print("Cache has been \033[32msuccessfully cleaned\033[0m!");
+            } else {
+                print("Cache is \033[32malready clean\033[0m!");
+            }
+            exit(0);
+        } else {
+            s_unflags |= CLEAN;
+        }
     } else {
         crash("Unknown flag \"%s\" detected", buffer);
     }
@@ -2111,13 +2215,16 @@ void port_folder(const char* path) {
         }
     }
     char buffer[PATHLEN] = { 0 };
+    char buffer2[PATHLEN] = { 0 };
     snprintf(buffer, PATHLEN, "build/env/%s", path + basename_ptr);
-    if (!make_symlink(path, buffer)) {
+    snprintf(buffer2, PATHLEN, "../../%s", path);
+    if (!dexists(buffer) && !make_symlink(buffer2, buffer)) {
         crash("Unable to create symlink of path \"%s\"", path);
     }
 }
 
 int main(int argc, char* argv[]) {
+    s_max_argsc = argc;
     initialize(argc, argv);
     integrate_modules();
     affirm_projects();
@@ -2145,5 +2252,12 @@ int main(int argc, char* argv[]) {
         free(s_threads);
         free(s_active_threads);
     }
+    if (s_flags & RUN) {
+        run_build();
+    }
+    for (size_t i = 0; i < s_copy_argsc; i++) {
+        free(s_copy_argsv[i]);
+    }
+    if (s_copy_argsv) free(s_copy_argsv);
     return 0;
 }

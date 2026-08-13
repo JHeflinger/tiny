@@ -1,6 +1,15 @@
 # Change Log
 All notable changes to this project will be documented in this file as of Tiny v1.0
 
+## Tiny 1.2.0
+
+### Added
+
+- Tiny now supports modules! Create a .tinymodule file to describe a module, and then another project can point to it via a git repository in order to download and package it!
+- new PORT option, which creates a symlink into a working environment
+- run flag to run in a working environment on build success
+- clean flag to clean the build cache
+
 ## Tiny 1.1.14
 
 ### Added
