@@ -432,7 +432,7 @@ int s_max_argsc = 0;
         char command_line[PATHLEN * 2] = { 0 };
         int offset = 0;
         for (int i = 0; i < s_copy_argsc; i++) {
-            offset += snprintf(command_line + offset, sizeof(command_line) - offset, "\"%s\"%c", s_copy_argsv[i], i == s_copy_argsc - 1 ? '\0' : ' ');
+            offset += snprintf(command_line + offset, sizeof(command_line) - offset, "\"%s%s\"%c", i == 0 ? "build/" : "", s_copy_argsv[i], i == s_copy_argsc - 1 ? '\0' : ' ');
         }
         STARTUPINFOA si = { 0 };
         PROCESS_INFORMATION pi = { 0 };
