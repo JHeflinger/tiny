@@ -160,6 +160,18 @@ typedef struct {
     int sourcei;
 } ThreadParameters;
 
+typedef struct {
+    char name[PATHLEN];
+    char url[PATHLEN];
+    char path[PATHLEN];
+    int integrated;
+} Module;
+
+typedef struct {
+    Module module;
+    void* next;
+} ModuleList;
+
 #ifdef __linux__
     typedef pthread_t TINY_THREAD;
     typedef pthread_mutex_t TINY_MUTEX;
@@ -176,6 +188,7 @@ typedef struct {
     #error "Unsupported operating system detected!"
 #endif
 
+int make_symlink(const char* src, const char* dest);
 int copytree(const char* src, const char* dest);
 void rmtree(const char* path);
 char* generate_quote(const char* s);
@@ -186,8 +199,13 @@ int fexists(const char* file);
 void walkdir(const char* path, FileHandler func);
 void walkfiles(const char* path, FileHandler func);
 uint64_t mtime();
+void dissect_time_elapsed(uint64_t time, int* hours, int* minutes, float* seconds);
+void integrate_modules();
+void dissect_module(const char* str);
 void download_module(const char* name, const char* url, const char* path);
 int rmakedir(const char* dir);
+void modulelist_add(ModuleList** list, Module module);
+void modulelist_delete(ModuleList* list);
 void pathlist_add(PathList** list, const char* path);
 void pathlist_delete(PathList* list);
 size_t pathlist_len(PathList* list);
@@ -214,14 +232,16 @@ void async_compile_progress_update(int index, int action, const char* name);
 void async_compile(void* params);
 void compile_source(const char* file);
 void parseflag(char* flag, int blacklistable);
+void configure(const char* prepath, const char* path);
+void affirm_projects();
 void initialize(int argc, char* argv[]);
-void add_vendors();
 void compile_vendors();
 void calculate_dependencies();
 void compile_objects();
 void compile_executable();
 void get_in_depth_headers(const char* dive_header, HeaderLinkList* update_header);
 void audit();
+void port_folder(const char* path);
 
 size_t s_start_time = 0;
 BuildFlags s_flags = NONE;
@@ -249,8 +269,13 @@ int* s_active_threads = NULL;
 TINY_MUTEX s_mutex;
 int s_sourcei = 0;
 int s_easymemory_detected = 0;
+ModuleList* s_modules = NULL;
 
 #ifdef __linux__
+    int make_symlink(const char* src, const char* dest) {
+        return symlink(src, dest) == 0;
+    }
+
     int copytree(const char* src, const char* dest) {
         char* sq = generate_quote(src);
         char* dq = generate_quote(dest);
@@ -371,6 +396,17 @@ int s_easymemory_detected = 0;
         return (uint64_t)(tv.tv_sec) * 1000 + (tv.tv_usec) / 1000;
     }
 #elif __WIN32
+    int make_symlink(const char* src, const char* dest) {
+        DWORD flags = SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE;
+        DWORD attrs = GetFileAttributesA(src);
+        if (attrs == INVALID_FILE_ATTRIBUTES) {
+            crash("GetFileAttributes failed on dir \"%s\"", src);
+        }
+        if (attrs & FILE_ATTRIBUTE_DIRECTORY)
+            flags |= SYMBOLIC_LINK_FLAG_DIRECTORY;
+        return CreateSymbolicLinkA(dest, src, flags);
+    }
+
     int copytree(const char* src, const char* dest) {
         char* sq = generate_quote(src);
         char* dq = generate_quote(dest);
@@ -491,6 +527,10 @@ int s_easymemory_detected = 0;
         return (uint64_t)GetTickCount64();
     }
 #elif __APPLE__
+    int make_symlink(const char* src, const char* dest) {
+        return symlink(src, dest) == 0;
+    }
+
     int copytree(const char* src, const char* dest) {
         char* sq = generate_quote(src);
         char* dq = generate_quote(dest);
@@ -614,6 +654,90 @@ int s_easymemory_detected = 0;
     #error "Unsupported operating system detected!"
 #endif
 
+void dissect_time_elapsed(uint64_t time, int* hours, int* minutes, float* seconds) {
+    time = mtime() - time;
+    *hours = (int)(time / 3600000);
+    *minutes = (int)((time - (*hours * 3600000)) / 60000);
+    *seconds = (((float)time) - (*hours * 3600000) - (*minutes * 60000)) / 1000.0f;
+}
+
+void integrate_modules() {
+    ModuleList* curr = s_modules;
+    if (curr != NULL) {
+        print("Integrating modules...");
+        uint64_t timer = mtime();
+        while (!curr->module.integrated) {
+            char fpbuffer[PATHLEN] = { 0 };
+            char mbuffer[PATHLEN] = { 0 };
+            snprintf(fpbuffer, PATHLEN, "build/modules/%s/", curr->module.name);
+            if (!dexists(fpbuffer)) {
+                print("Downloading module \"%s\"...", curr->module.name);
+                download_module(curr->module.name, curr->module.url, curr->module.path);
+            }
+            snprintf(mbuffer, PATHLEN, "build/modules/%s/.tinymodule", curr->module.name);
+            if (fexists(mbuffer)) {
+                configure(fpbuffer, mbuffer);
+            } else {
+                crash("No .tinymodule file detected for module \"%s\" - this is required to configure a module", curr->module.name);
+            }
+            curr->module.integrated = 1;
+            if (curr->next) {
+                curr = (ModuleList*)(curr->next);
+            } else {
+                curr = s_modules;
+            }
+        }
+        int hours, minutes;
+        float seconds;
+        dissect_time_elapsed(timer, &hours, &minutes, &seconds);
+        print("\033[32mFinished\033[0m integrating modules in %d:%d:%.3f", hours, minutes, seconds);
+    }
+}
+
+void dissect_module(const char* str) {
+    Module module = { 0 };
+    char buffer[PATHLEN] = { 0 };
+    size_t bi = 0;
+    for (size_t i = 0; i < strlen(str); i++) {
+        if (str[i] == ' ') {
+            buffer[bi] = '\0';
+            bi = 0;
+            if (module.name[0] == '\0') {
+                strcpy(module.name, buffer);
+            } else if (module.url[0] == '\0') {
+                strcpy(module.url, buffer);
+            } else {
+                crash("Too many arguments detected when trying to dissect module \"%s\" - \"%s\"", module.name, str);
+            }
+        } else {
+            buffer[bi] = str[i];
+            bi++;
+        }
+    }
+    buffer[bi] = '\0';
+    if (module.name[0] == '\0') {
+        crash("Too few arguments detected when trying to dissect module \"%s\" - \"%s\"", str, str);
+    } else if (module.url[0] == '\0') {
+        warn("No path argument detected when trying to dissect module \"%s\" - defaulting to root directory", module.name);
+        strcpy(module.url, buffer);
+        strcpy(module.path, ".");
+    } else {
+        strcpy(module.path, buffer);
+    }
+    ModuleList* curr = s_modules;
+    int found = 0;
+    while (curr != NULL) {
+        if (strcmp(curr->module.name, module.name) == 0) {
+            found = 1;
+            break;
+        }
+        curr = (ModuleList*)(curr->next);
+    }
+    if (!found) {
+        modulelist_add(&s_modules, module);
+    }
+}
+
 void download_module(const char* name, const char* url, const char* path) {
     const char* folder = (path && *path) ? path : ".";
     const char* tmpdir = "build/tmp";
@@ -676,6 +800,26 @@ int rmakedir(const char* dir) {
     }
     free(p);
     return 1;
+}
+
+void modulelist_add(ModuleList** list, Module module) {
+    ModuleList* new = calloc(1, sizeof(ModuleList));
+    new->next = NULL;
+    new->module = module;
+    if (*list == NULL) {
+        *list = new;
+        return;
+    }
+    ModuleList* current = *list;
+    new->next = current;
+    *list = new;
+}
+
+void modulelist_delete(ModuleList* list) {
+    if (list == NULL) return;
+    ModuleList* n = (ModuleList*)list->next;
+    free(list);
+    modulelist_delete(n);
 }
 
 void pathlist_add(PathList** list, const char* path) {
@@ -859,6 +1003,7 @@ int vardeclared(const char* line) {
 }
 
 void easyc_audit(const char* file) {
+    if (strstr(file, "build") == &(file[0]) || strstr(file, "./build") == &(file[0])) return;
     int slen = strlen(file);
     int header = (slen > 2 && (file[slen - 1] == 'h' && file[slen - 2] == '.'));
     int source = (slen > 2 && (file[slen - 1] == 'c' && file[slen - 2] == '.'));
@@ -882,10 +1027,11 @@ void easyc_audit(const char* file) {
 }
 
 void syntax_audit(const char* file) {
+    if (strstr(file, "build") == &(file[0]) || strstr(file, "./build") == &(file[0])) return;
     int slen = strlen(file);
     int header = (slen > 2 && (file[slen - 1] == 'h' && file[slen - 2] == '.'));
     int source = (slen > 2 && (file[slen - 1] == 'c' && file[slen - 2] == '.'));
-    if (!header && !source) {
+    if (!header && !source && !strstr(file, ".tinymodule")) {
         print("Detected abnormal file type in project: \"%s\"", file);
         s_vulnerabilities++;
         return;
@@ -1187,18 +1333,21 @@ void affirmdir(const char* dir) {
 }
 
 void affirm_to_cache(const char* dir) {
+    if (strstr(dir, "build") == &(dir[0]) || strstr(dir, "./build") == &(dir[0])) return;
     char buffer[PATHLEN] = { 0 };
     snprintf(buffer, PATHLEN, "build/cache/%s", dir);
     affirmdir(buffer);
 }
 
 void add_to_sources(const char* file) {
+    if (strstr(file, "build") == &(file[0]) || strstr(file, "./build") == &(file[0])) return;
     size_t slen = strlen(file);
     if (slen > 2 && file[slen - 1] == 'c' && file[slen - 2] == '.')
         pathlist_add(&s_sources, file);
 }
 
 void verify_header(const char* file) {
+    if (strstr(file, "build") == &(file[0]) || strstr(file, "./build") == &(file[0])) return;
     size_t slen = strlen(file);
     if (slen > 2 && (file[slen - 1] != 'h' || file[slen - 2] != '.')) return;
     int basename_ptr = 0;
@@ -1222,6 +1371,7 @@ void verify_header(const char* file) {
 }
 
 void accumulate_header(const char* file) {
+    if (strstr(file, "build") == &(file[0]) || strstr(file, "./build") == &(file[0])) return;
     size_t slen = strlen(file);
     if (slen > 2 && (file[slen - 1] != 'h' || file[slen - 2] != '.')) return;
     int basename_ptr = 0;
@@ -1287,6 +1437,7 @@ void async_compile(void* params) {
 }
 
 void compile_source(const char* file) {
+    if (strstr(file, "build") == &(file[0]) || strstr(file, "./build") == &(file[0])) return;
     size_t slen = strlen(file);
     if (slen > 2 && (file[slen - 1] != 'c' || file[slen - 2] != '.')) return;
     int basename_ptr = 0;
@@ -1299,11 +1450,13 @@ void compile_source(const char* file) {
     char destination[PATHLEN] = { 0 };
     snprintf(destination, PATHLEN, "build/cache/%s", file);
     if (strcmp(file + basename_ptr, s_main_file_name) == 0) {
-        if (s_found_main) {
-            crash("another main file detected: %s", file);
+        if (strcmp(s_main_file_path, file) != 0) {
+            if (s_found_main) {
+                crash("another main file detected: %s", file);
+            }
+            s_found_main = 1;
+            strcpy(s_main_file_path, file);
         }
-        s_found_main = 1;
-        strcpy(s_main_file_path, file);
         if (!fexists(destination) || !filecmp(destination, file)) {
             copyfile(file, destination);
             s_main_up_to_date = 0;
@@ -1465,100 +1618,16 @@ void parseflag(char* flag, int blacklistable) {
     }
 }
 
-void initialize(int argc, char* argv[]) {
-    // initialize timer
-    s_start_time = mtime();
-
-    // parse flags
-    for (int i = 1; i < argc; i++) {
-        parseflag(argv[i], 1);
-    }
-
-    // set up cwd
-    if (cwd(s_cwd) == NULL) {
-        crash("Unable to find the current working directory");
-    }
-
-    // initialize project and main dir and file
-    strcpy(s_main_file_name, "main.c");
-    if (fexists(".tinyconf")) {
-        FILE* file = fopen(".tinyconf", "r");
-        if (!file) {
-            crash("Unable to open configuration file");
-        }
-        char line[PATHLEN * 2] = { 0 };
-        char precursor[PATHLEN] = { 0 };
-        while (fgets(line, sizeof(line), file)) {
-            for (int i = strlen(line) - 1; i >= 0; i--) {
-                if (line[i] == '\n' || line[i] == '\r') {
-                    line[i] = '\0';
-                } else break;
-            }
-            size_t postcursor = 0;
-            for (size_t i = 0; i < strlen(line); i++) {
-                if (line[i] == ' ') {
-                    precursor[i] = '\0';
-                    postcursor = i + 1;
-                    break;
-                } else {
-                    precursor[i] = line[i];
-                }
-            }
-            if (strcmp(precursor, "PROJECT") == 0) {
-                pathlist_add(&s_projects, line + postcursor);
-            } else if (strcmp(precursor, "MAIN") == 0) {
-                strcpy(s_main_file_name, line + postcursor);
-            }
-        }
-        fclose(file);
-    }
-
-    // default project directory
-    if (s_projects == NULL) {
-        pathlist_add(&s_projects, "src");
-    }
-
-    // set up build directories
-    affirmdir("build");
-    affirmdir("build/cache");
-    affirmdir("build/vendor");
-
-    // set up project directories
-    PathList* curr = s_projects;
-    while (curr != NULL) {
-        // ensure project directory exists
-        if (!dexists(curr->str)) {
-            crash("Project directory \"%s/\" does not exist - if this is not your desired location, please specify a different one in \".tinyconf\"", curr->str);
-        }
-
-        // set up build directories
-        char tbuf[PATHLEN + 12] = { 0 };
-        snprintf(tbuf, PATHLEN + 12, "build/cache/%s", curr->str);
-        affirmdir(tbuf);
-
-        // set up cache folders
-        walkdir(curr->str, affirm_to_cache);
-
-        // set up include directories
-        snprintf(tbuf, PATHLEN + 12, "-I\"%s\"", curr->str);
-        pathlist_add(&s_includes, tbuf);
-
-        curr = (PathList*)curr->next;
-    }
-}
-
-void add_vendors() {
-    if (!fexists(".tinyconf")) return;
-    FILE* file = fopen(".tinyconf", "r");
+void configure(const char* prepath, const char* path) {
+    FILE* file = fopen(path, "r");
     if (!file) {
-        crash("Unable to open configuration file");
+        crash("Unable to open configuration file \"%s\"", path);
     }
     char line[PATHLEN * 2] = { 0 };
     char precursor[PATHLEN] = { 0 };
     char workbuffer[PATHLEN] = { 0 };
     int linecount = 0;
     while (fgets(line, sizeof(line), file)) {
-        linecount++;
         for (int i = strlen(line) - 1; i >= 0; i--) {
             if (line[i] == '\n' || line[i] == '\r') {
                 line[i] = '\0';
@@ -1630,20 +1699,31 @@ void add_vendors() {
                 }
             }
         #endif
-        if (strcmp(precursor, "INCLUDE") == 0) {
-            snprintf(workbuffer, PATHLEN, "-I\"%s\"", line + postcursor);
+        if (strcmp(precursor, "PROJECT") == 0) {
+            snprintf(workbuffer, PATHLEN, "%s%s", prepath, line + postcursor);
+            pathlist_add(&s_projects, workbuffer);
+        } else if (strcmp(precursor, "MAIN") == 0) {
+            snprintf(workbuffer, PATHLEN, "%s%s", prepath, line + postcursor);
+            if (fexists(workbuffer)) {
+                strcpy(s_main_file_name, workbuffer);
+            } else {
+                strcpy(s_main_file_name, line + postcursor);
+            }
+        } else if (strcmp(precursor, "INCLUDE") == 0) {
+            snprintf(workbuffer, PATHLEN, "-I\"%s%s\"", prepath, line + postcursor);
             pathlist_add(&s_includes, workbuffer);
         } else if (strcmp(precursor, "LINK") == 0) {
             snprintf(workbuffer, PATHLEN, "-l%s", line + postcursor);
             pathlist_add(&s_links, workbuffer);
         } else if (strcmp(precursor, "LIB") == 0) {
-            snprintf(workbuffer, PATHLEN, "-L\"%s\"", line + postcursor);
+            snprintf(workbuffer, PATHLEN, "-L\"%s%s\"", prepath, line + postcursor);
             pathlist_add(&s_libs, workbuffer);
         } else if (strcmp(precursor, "SOURCE") == 0) {
-            if (dexists(line + postcursor)) {
-                walkfiles(line + postcursor, add_to_sources);
+            snprintf(workbuffer, PATHLEN, "%s%s", prepath, line + postcursor);
+            if (dexists(workbuffer)) {
+                walkfiles(workbuffer, add_to_sources);
             } else {
-                pathlist_add(&s_sources, line + postcursor);
+                pathlist_add(&s_sources, workbuffer);
             }
         } else if (strcmp(precursor, "FLAG") == 0) {
             char b[PATHLEN] = { 0 };
@@ -1656,13 +1736,74 @@ void add_vendors() {
             snprintf(workbuffer, PATHLEN, "-D\"%s\"", line + postcursor);
             pathlist_add(&s_defines, workbuffer);
         } else if (strcmp(precursor, "RAW") == 0) {
-            snprintf(workbuffer, PATHLEN, "%s", line + postcursor);
-            pathlist_add(&s_raws, workbuffer);
-        } else if (strcmp(precursor, "PROJECT") != 0 && strcmp(precursor, "MAIN") != 0) {
+            pathlist_add(&s_raws, line + postcursor);
+        } else if (strcmp(precursor, "MODULE") == 0) {
+            dissect_module(line + postcursor);
+        } else if (strcmp(precursor, "PORT") == 0) {
+            snprintf(workbuffer, PATHLEN, "%s%s", prepath, line + postcursor);
+            port_folder(workbuffer);
+        } else {
             warn("Unknown precursor \"%s\" detected on line %d of \".tinyconf\" - skipping", precursor, linecount);
         }
     }
     fclose(file);
+}
+
+void affirm_projects() {
+    // default project directory
+    if (s_projects == NULL) {
+        pathlist_add(&s_projects, "src");
+    }
+
+    PathList* curr = s_projects;
+    while (curr != NULL) {
+        // ensure project directory exists
+        if (!dexists(curr->str)) {
+            crash("Project directory \"%s/\" does not exist - if this is not your desired location, please specify a different one in \".tinyconf\"", curr->str);
+        }
+
+        // set up build directories
+        char tbuf[PATHLEN + 12] = { 0 };
+        snprintf(tbuf, PATHLEN + 12, "build/cache/%s", curr->str);
+        affirmdir(tbuf);
+
+        // set up cache folders
+        walkdir(curr->str, affirm_to_cache);
+
+        // set up include directories
+        snprintf(tbuf, PATHLEN + 12, "-I\"%s\"", curr->str);
+        pathlist_add(&s_includes, tbuf);
+
+        curr = (PathList*)curr->next;
+    }
+}
+
+void initialize(int argc, char* argv[]) {
+    // initialize timer
+    s_start_time = mtime();
+
+    // parse flags
+    for (int i = 1; i < argc; i++) {
+        parseflag(argv[i], 1);
+    }
+
+    // set up cwd
+    if (cwd(s_cwd) == NULL) {
+        crash("Unable to find the current working directory");
+    }
+
+    // fallback main file name
+    strcpy(s_main_file_name, "main.c");
+
+    // import configuration from .tinyconf
+    if (fexists(".tinyconf")) {
+        configure("", ".tinyconf");
+    }
+
+    // set up build directories
+    affirmdir("build");
+    affirmdir("build/cache");
+    affirmdir("build/vendor");
 }
 
 void compile_vendors() {
@@ -1703,11 +1844,10 @@ void compile_vendors() {
             s_flags & PROD ? "-O3 -DPROD_BUILD" : "");
         uint64_t timer = mtime();
         int result = system(commandbuf);
-        timer = mtime() - timer;
         if (result == 0) {
-            int hours = (int)(timer / 3600000);
-            int minutes = (int)((timer - (hours * 3600000)) / 60000);
-            float seconds = (((float)timer) - (hours * 3600000) - (minutes * 60000)) / 1000.0f;
+            int hours, minutes;
+            float seconds;
+            dissect_time_elapsed(timer, &hours, &minutes, &seconds);
             print("\033[32mFinished\033[0m compiling vendors in %d:%d:%.3f", hours, minutes, seconds);
         } else {
             print("Building vendors \033[31mfailed\033[0m");
@@ -1743,10 +1883,9 @@ void calculate_dependencies() {
         }
         if (current == s_changed_headers) break;
     }
-    timer = mtime() - timer;
-    int hours = (int)(timer / 3600000);
-    int minutes = (int)((timer - (hours * 3600000)) / 60000);
-    float seconds = (((float)timer) - (hours * 3600000) - (minutes * 60000)) / 1000.0f;
+    int hours, minutes;
+    float seconds;
+    dissect_time_elapsed(timer, &hours, &minutes, &seconds);
     print("\033[32mFinished\033[0m calculating depdencies in %d:%d:%.3f", hours, minutes, seconds);
 }
 
@@ -1762,13 +1901,15 @@ void compile_objects() {
                 break;
             }
         }
-        snprintf(destination, PATHLEN, "build/cache/%s", s_main_file_name + basename_ptr);
+        snprintf(destination, PATHLEN, "build/cache/%s", s_main_file_name);
         strcpy(s_main_file_path, s_main_file_name);
         s_found_main = 1;
-        if (!fexists(destination) || !filecmp(destination, s_main_file_name)) {
-            copyfile(s_main_file_name, destination);
+        if (!fexists(destination) || !filecmp(destination, s_main_file_path)) {
+            copyfile(s_main_file_path, destination);
             s_main_up_to_date = 0;
         }
+        snprintf(destination, PATHLEN, "%s", s_main_file_name + basename_ptr);
+        strcpy(s_main_file_name, destination);
     }
     PathList* curr = s_projects;
     while (curr != NULL) {
@@ -1789,10 +1930,9 @@ void compile_objects() {
     if (s_sources_up_to_date) {
         print("\033[1A\033[0KSources are currently \033[32mup to date\033[0m");
     } else {
-        timer = mtime() - timer;
-        int hours = (int)(timer / 3600000);
-        int minutes = (int)((timer - (hours * 3600000)) / 60000);
-        float seconds = (((float)timer) - (hours * 3600000) - (minutes * 60000)) / 1000.0f;
+        int hours, minutes;
+        float seconds;
+        dissect_time_elapsed(timer, &hours, &minutes, &seconds);
         print("\033[32mFinished\033[0m compiling sources in %d:%d:%.3f", hours, minutes, seconds);
     }
     if (!s_found_main) {
@@ -1829,11 +1969,10 @@ void compile_executable() {
         s_flags & PROD ? "-O3 -DPROD_BUILD" : "");
     if (s_flags & DEBUG) printf("\n\n==========DEBUG COMMAND BUFFER==========\n\n%s\n\n========END DEBUG COMMAND BUFFER========\n\n", commandbuf);
     int result = system(commandbuf);
-    timer = mtime() - timer;
     if (result == 0) {
-        int hours = (int)(timer / 3600000);
-        int minutes = (int)((timer - (hours * 3600000)) / 60000);
-        float seconds = (((float)timer) - (hours * 3600000) - (minutes * 60000)) / 1000.0f;
+        int hours, minutes;
+        float seconds;
+        dissect_time_elapsed(timer, &hours, &minutes, &seconds);
         print("\033[32mFinished\033[0m compiling executable in %d:%d:%.3f", hours, minutes, seconds);
     } else {
         print("Building executable \033[31mfailed\033[0m");
@@ -1948,10 +2087,9 @@ void audit() {
         }
     }
 
-    timer = mtime() - timer;
-    int hours = (int)(timer / 3600000);
-    int minutes = (int)((timer - (hours * 3600000)) / 60000);
-    float seconds = (((float)timer) - (hours * 3600000) - (minutes * 60000)) / 1000.0f;
+    int hours, minutes;
+    float seconds;
+    dissect_time_elapsed(timer, &hours, &minutes, &seconds);
     print("Finished audit in %d:%d:%.3f - detected %s%d\033[0m vulnerabilities", 
        hours, minutes, seconds, 
        s_vulnerabilities == 0 ? "\033[32m" : s_vulnerabilities <= 10 ? "\033[33m" : "\033[31m", 
@@ -1960,9 +2098,29 @@ void audit() {
     clean_source_links();
 }
 
+void port_folder(const char* path) {
+    if (!dexists(path)) {
+        crash("Cannot port folder \"%s\" because it does not exist", path);
+    }
+    affirmdir("build/env");
+    int basename_ptr = 0;
+    for (int i = strlen(path); i > 0; i--) {
+        if (path[i] == '/' || path[i] == '\\') {
+            basename_ptr = i + 1;
+            break;
+        }
+    }
+    char buffer[PATHLEN] = { 0 };
+    snprintf(buffer, PATHLEN, "build/env/%s", path + basename_ptr);
+    if (!make_symlink(path, buffer)) {
+        crash("Unable to create symlink of path \"%s\"", path);
+    }
+}
+
 int main(int argc, char* argv[]) {
     initialize(argc, argv);
-    add_vendors();
+    integrate_modules();
+    affirm_projects();
     if (s_flags & AUDIT) audit();
     compile_vendors();
     calculate_dependencies();
@@ -1979,10 +2137,9 @@ int main(int argc, char* argv[]) {
     pathlist_delete(s_libs);
     pathlist_delete(s_raws);
     pathlist_delete(s_projects);
-    s_start_time = mtime() - s_start_time;
-    int hours = (int)(s_start_time / 3600000);
-    int minutes = (int)((s_start_time - (hours * 3600000)) / 60000);
-    float seconds = (((float)s_start_time) - (hours * 3600000) - (minutes * 60000)) / 1000.0f;
+    int hours, minutes;
+    float seconds;
+    dissect_time_elapsed(s_start_time, &hours, &minutes, &seconds);
     print("\033[32mFinished\033[0m total build in %d:%d:%.3f", hours, minutes, seconds);
     if (s_flags & FAST) {
         free(s_threads);
