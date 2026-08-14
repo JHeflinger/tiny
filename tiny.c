@@ -5,7 +5,7 @@
 
 #define VERSION 1
 #define MAJOR_RELEASE 2
-#define MINOR_RELEASE 1
+#define MINOR_RELEASE 2
 
 #include <stdio.h>
 #include <time.h>
@@ -821,17 +821,24 @@ void download_module(const char* name, const char* url, const char* path) {
     if (!q_url || !q_tmp || !q_folder) {
         crash("Invalid arguments to module detected - [NAME: \"%s\" | URL: \"%s\" | PATH: \"%s\"]", name, url, path);
     }
-    snprintf(cmd, sizeof(cmd), "git clone --quiet --no-checkout --depth 1 --filter=blob:none --sparse %s %s", q_url, q_tmp);
-    if (runcmd(cmd) != 0) {
-        crash("Unable to download module \"%s\" via git (bad URL, auth, git, or network)", name);
-    }
-    snprintf(cmd, sizeof(cmd), "cd %s && git sparse-checkout set %s", q_tmp, q_folder);
-    if (runcmd(cmd) != 0) {
-        crash("Unable to download module \"%s\" via git - sprase-checkout failed", name);
-    }
-    snprintf(cmd, sizeof(cmd), "cd %s && git checkout --quiet", q_tmp);
-    if (runcmd(cmd) != 0) {
-        crash("Unable to download module \"%s\" via git - materialization failed", name);
+    if (strcmp(folder, ".") == 0) {
+        snprintf(cmd, sizeof(cmd), "git clone --quiet --depth 1 --filter=blob:none %s %s", q_url, q_tmp);
+        if (runcmd(cmd) != 0) {
+            crash("Unable to download module \"%s\" via git (bad URL, auth, git, or network)", name);
+        }
+    } else {
+        snprintf(cmd, sizeof(cmd), "git clone --quiet --no-checkout --depth 1 --filter=blob:none --sparse %s %s", q_url, q_tmp);
+        if (runcmd(cmd) != 0) {
+            crash("Unable to download module \"%s\" via git (bad URL, auth, git, or network)", name);
+        }
+        snprintf(cmd, sizeof(cmd), "cd %s && git sparse-checkout set %s", q_tmp, q_folder);
+        if (runcmd(cmd) != 0) {
+            crash("Unable to download module \"%s\" via git - sprase-checkout failed", name);
+        }
+        snprintf(cmd, sizeof(cmd), "cd %s && git checkout --quiet", q_tmp);
+        if (runcmd(cmd) != 0) {
+            crash("Unable to download module \"%s\" via git - materialization failed", name);
+        }
     }
     char src_path[PATHLEN] = { 0 };
     snprintf(src_path, sizeof(src_path), "%s%c%s", tmpdir, PATH_SEP, folder);
