@@ -5,7 +5,7 @@
 
 #define VERSION 1
 #define MAJOR_RELEASE 2
-#define MINOR_RELEASE 2
+#define MINOR_RELEASE 3
 
 #include <stdio.h>
 #include <time.h>
@@ -1637,7 +1637,7 @@ void compile_source(const char* file) {
 }
 
 void parseflag(char* flag, int blacklistable) {
-    if (s_flags & RUN) {
+    if ((s_flags & RUN) && blacklistable) {
         s_copy_argsv[s_copy_argsc] = calloc(strlen(flag) + 1, sizeof(char));
         strcpy(s_copy_argsv[s_copy_argsc], flag);
         s_copy_argsc++;

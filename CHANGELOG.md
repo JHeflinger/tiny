@@ -1,6 +1,12 @@
 # Change Log
 All notable changes to this project will be documented in this file as of Tiny v1.0
 
+## Tiny 1.2.3
+
+### Fixed
+
+- Fixed .tinyconf flags getting bundled in run args
+
 ## Tiny 1.2.2
 
 ### Fixed
