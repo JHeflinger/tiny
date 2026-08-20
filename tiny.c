@@ -446,9 +446,9 @@ int s_max_argsc = 0;
 
     int make_symlink(const char* src, const char* dest) {
         DWORD flags = SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE;
-        DWORD attrs = GetFileAttributesA(src);
+        DWORD attrs = GetFileAttributesA(src + 6);
         if (attrs == INVALID_FILE_ATTRIBUTES) {
-            crash("GetFileAttributes failed on dir \"%s\"", src);
+            crash("GetFileAttributes failed on dir \"%s\"", src + 6);
         }
         if (attrs & FILE_ATTRIBUTE_DIRECTORY)
             flags |= SYMBOLIC_LINK_FLAG_DIRECTORY;
@@ -2228,7 +2228,7 @@ void port_folder(const char* path) {
     char buffer[PATHLEN] = { 0 };
     char buffer2[PATHLEN] = { 0 };
     snprintf(buffer, PATHLEN, "build/env/%s", path + basename_ptr);
-    snprintf(buffer2, PATHLEN, "../../%s", path);
+    snprintf(buffer2, PATHLEN, "..%c..%c%s", PATH_SEP, PATH_SEP, path);
     if (!dexists(buffer) && !make_symlink(buffer2, buffer)) {
         crash("Unable to create symlink of path \"%s\"", path);
     }
