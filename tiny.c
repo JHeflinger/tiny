@@ -737,11 +737,13 @@ void integrate_modules() {
         while (!curr->module.integrated) {
             char fpbuffer[PATHLEN] = { 0 };
             char mbuffer[PATHLEN] = { 0 };
-            snprintf(fpbuffer, PATHLEN, "build%cmodules%c%s%c", PATH_SEP, PATH_SEP, PATH_SEP, curr->module.name);
+            snprintf(fpbuffer, PATHLEN, "build/modules/%s", curr->module.name);
             if (!dexists(fpbuffer)) {
+                snprintf(fpbuffer, PATHLEN, "build/modules/%s/", curr->module.name);
                 print("Downloading module \"%s\"...", curr->module.name);
                 download_module(curr->module.name, curr->module.url, curr->module.path);
             }
+            snprintf(fpbuffer, PATHLEN, "build/modules/%s/", curr->module.name);
             snprintf(mbuffer, PATHLEN, "build/modules/%s/.tinymodule", curr->module.name);
             if (fexists(mbuffer)) {
                 configure(fpbuffer, mbuffer);
