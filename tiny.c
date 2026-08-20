@@ -737,7 +737,7 @@ void integrate_modules() {
         while (!curr->module.integrated) {
             char fpbuffer[PATHLEN] = { 0 };
             char mbuffer[PATHLEN] = { 0 };
-            snprintf(fpbuffer, PATHLEN, "build/modules/%s/", curr->module.name);
+            snprintf(fpbuffer, PATHLEN, "build%cmodules%c%s%c", PATH_SEP, PATH_SEP, PATH_SEP, curr->module.name);
             if (!dexists(fpbuffer)) {
                 print("Downloading module \"%s\"...", curr->module.name);
                 download_module(curr->module.name, curr->module.url, curr->module.path);
