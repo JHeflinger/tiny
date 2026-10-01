@@ -253,6 +253,7 @@ void get_in_depth_headers(const char* dive_header, HeaderLinkList* update_header
 void audit();
 void port_folder(const char* path);
 void run_executes();
+void run_ports();
 
 size_t s_start_time = 0;
 BuildFlags s_flags = NONE;
@@ -273,6 +274,7 @@ PathList* s_libs = NULL;
 PathList* s_sources = NULL;
 PathList* s_objects = NULL;
 PathList* s_executes = NULL;
+PathList* s_ports = NULL;
 PathList* s_changed_headers = NULL;
 HeaderLinkList* s_header_links = NULL;
 HeaderLinkList* s_source_links = NULL;
@@ -1892,7 +1894,7 @@ void configure(const char* prepath, const char* path) {
             }
         } else if (strcmp(precursor, "PORT") == 0) {
             snprintf(workbuffer, PATHLEN, "%s%s", prepath, line + postcursor);
-            port_folder(workbuffer);
+            pathlist_append(&s_ports, workbuffer);
         } else {
             warn("Unknown precursor \"%s\" detected on line %d of \".tinyconf\" - skipping", precursor, linecount);
         }
@@ -2327,11 +2329,20 @@ void run_executes() {
     }
 }
 
+void run_ports() {
+    PathList* curr = s_ports;
+    while (curr != NULL) {
+        port_folder(curr->str);
+        curr = (PathList*)curr->next;
+    }
+}
+
 int main(int argc, char* argv[]) {
     s_max_argsc = argc;
     initialize(argc, argv);
     run_executes();
     integrate_modules();
+    run_ports();
     affirm_projects();
     if (s_flags & AUDIT) audit();
     compile_vendors();
@@ -2347,6 +2358,7 @@ int main(int argc, char* argv[]) {
     pathlist_delete(s_links);
     pathlist_delete(s_defines);
     pathlist_delete(s_executes);
+    pathlist_delete(s_ports);
     pathlist_delete(s_libs);
     pathlist_delete(s_raws);
     pathlist_delete(s_projects);
