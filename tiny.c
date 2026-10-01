@@ -5,7 +5,7 @@
 
 #define VERSION 1
 #define MAJOR_RELEASE 2
-#define MINOR_RELEASE 3
+#define MINOR_RELEASE 4
 
 #include <stdio.h>
 #include <time.h>
@@ -139,7 +139,8 @@ typedef enum {
     DEBUG = 1 << 3,
     RECOMPILE_VENDORS = 1 << 4,
     RUN = 1 << 5,
-    CLEAN = 1 << 6
+    CLEAN = 1 << 6,
+    UPDATE_MODULES = 1 << 7
 } BuildFlags;
 
 typedef struct {
@@ -738,7 +739,7 @@ void integrate_modules() {
             char fpbuffer[PATHLEN] = { 0 };
             char mbuffer[PATHLEN] = { 0 };
             snprintf(fpbuffer, PATHLEN, "build/modules/%s", curr->module.name);
-            if (!dexists(fpbuffer)) {
+            if (!dexists(fpbuffer) || (s_flags & UPDATE_MODULES)) {
                 snprintf(fpbuffer, PATHLEN, "build/modules/%s/", curr->module.name);
                 print("Downloading module \"%s\"...", curr->module.name);
                 download_module(curr->module.name, curr->module.url, curr->module.path);
@@ -849,6 +850,9 @@ void download_module(const char* name, const char* url, const char* path) {
     }
     char dest_path[PATHLEN] = { 0 };
     snprintf(dest_path, sizeof(dest_path), "build/modules/%s", name);
+    if (dexists(dest_path)) {
+        rmtree(dest_path);
+    }
     if (!copytree(src_path, dest_path)) {
         crash("Failed to copy over module-critical data for module \"%s\"", name);
     }
@@ -1726,6 +1730,12 @@ void parseflag(char* flag, int blacklistable) {
             exit(0);
         } else {
             s_unflags |= CLEAN;
+        }
+    } else if (strcmp("-u", buffer) == 0 || strcmp("-update", buffer) == 0) {
+        if (whitelist && !(s_unflags & UPDATE_MODULES)) {
+            s_flags |= UPDATE_MODULES;
+        } else {
+            s_unflags |= UPDATE_MODULES;
         }
     } else {
         crash("Unknown flag \"%s\" detected", buffer);
