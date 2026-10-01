@@ -5,7 +5,7 @@
 
 #define VERSION 1
 #define MAJOR_RELEASE 2
-#define MINOR_RELEASE 4
+#define MINOR_RELEASE 5
 
 #include <stdio.h>
 #include <time.h>
