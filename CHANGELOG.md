@@ -1,6 +1,12 @@
 # Change Log
 All notable changes to this project will be documented in this file as of Tiny v1.0
 
+## Tiny 1.2.5
+
+### Added
+
+- new configuration option "EXECUTE" allows users to specify scripts and executables to run prior to the build process.
+
 ## Tiny 1.2.4
 
 ### Added

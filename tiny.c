@@ -216,6 +216,7 @@ int rmakedir(const char* dir);
 void modulelist_add(ModuleList** list, Module module);
 void modulelist_delete(ModuleList* list);
 void pathlist_add(PathList** list, const char* path);
+void pathlist_append(PathList** list, const char* path);
 void pathlist_delete(PathList* list);
 size_t pathlist_len(PathList* list);
 void pathlist_construct(PathList* list, char* output);
@@ -251,6 +252,7 @@ void compile_executable();
 void get_in_depth_headers(const char* dive_header, HeaderLinkList* update_header);
 void audit();
 void port_folder(const char* path);
+void run_executes();
 
 size_t s_start_time = 0;
 BuildFlags s_flags = NONE;
@@ -270,6 +272,7 @@ PathList* s_defines = NULL;
 PathList* s_libs = NULL;
 PathList* s_sources = NULL;
 PathList* s_objects = NULL;
+PathList* s_executes = NULL;
 PathList* s_changed_headers = NULL;
 HeaderLinkList* s_header_links = NULL;
 HeaderLinkList* s_source_links = NULL;
@@ -914,6 +917,21 @@ void pathlist_add(PathList** list, const char* path) {
     PathList* current = *list;
     new->next = current;
     *list = new;
+}
+
+void pathlist_append(PathList** list, const char* path) {
+    PathList* node = calloc(1, sizeof(PathList));
+    node->next = NULL;
+    strncpy(node->str, path, PATHLEN - 1);
+    if (*list == NULL) {
+        *list = node;
+        return;
+    }
+    PathList* current = *list;
+    while (current->next != NULL) {
+        current = (PathList*)current->next;
+    }
+    current->next = node;
 }
 
 void pathlist_delete(PathList* list) {
@@ -1752,6 +1770,7 @@ void configure(const char* prepath, const char* path) {
     char workbuffer[PATHLEN] = { 0 };
     int linecount = 0;
     while (fgets(line, sizeof(line), file)) {
+        linecount++;
         for (int i = strlen(line) - 1; i >= 0; i--) {
             if (line[i] == '\n' || line[i] == '\r') {
                 line[i] = '\0';
@@ -1863,6 +1882,14 @@ void configure(const char* prepath, const char* path) {
             pathlist_add(&s_raws, line + postcursor);
         } else if (strcmp(precursor, "MODULE") == 0) {
             dissect_module(line + postcursor);
+        } else if (strcmp(precursor, "EXECUTE") == 0) {
+            if (prepath[0] != '\0') {
+                warn("EXECUTE is only supported in the root \".tinyconf\" - ignoring it on line %d of \"%s\"", linecount, path);
+            } else if (postcursor == 0 || line[postcursor] == '\0') {
+                crash("EXECUTE on line %d of \".tinyconf\" requires a path to a script or executable", linecount);
+            } else {
+                pathlist_append(&s_executes, line + postcursor);
+            }
         } else if (strcmp(precursor, "PORT") == 0) {
             snprintf(workbuffer, PATHLEN, "%s%s", prepath, line + postcursor);
             port_folder(workbuffer);
@@ -2246,9 +2273,64 @@ void port_folder(const char* path) {
     }
 }
 
+void run_executes() {
+    PathList* curr = s_executes;
+    while (curr != NULL) {
+        const char* line = curr->str;
+        char target[PATHLEN] = { 0 };
+        const char* args = "";
+        strncpy(target, line, PATHLEN - 1);
+        if (!fexists(target)) {
+            char* space = strchr(target, ' ');
+            if (space) {
+                *space = '\0';
+                args = space + 1;
+                while (*args == ' ') args++;
+            }
+        }
+        if (!fexists(target)) {
+            crash("EXECUTE target \"%s\" does not exist - check the path in \".tinyconf\"", target);
+        }
+        char cmd[PATHLEN * 2] = { 0 };
+        #ifdef __WIN32
+            char winpath[PATHLEN] = { 0 };
+            strncpy(winpath, target, PATHLEN - 1);
+            for (char* c = winpath; *c; c++) {
+                if (*c == '/') *c = '\\';
+            }
+            snprintf(cmd, sizeof(cmd), "\"\"%s\"%s%s\"", winpath, args[0] ? " " : "", args);
+        #else
+            char* quoted = generate_quote(target);
+            if (!quoted) {
+                crash("Unable to prepare EXECUTE target \"%s\"", target);
+            }
+            snprintf(cmd, sizeof(cmd), "%s%s%s%s", strchr(target, '/') ? "" : "./", quoted, args[0] ? " " : "", args);
+            free(quoted);
+        #endif
+        print("Executing \"%s\"...", line);
+        fflush(stdout);
+        uint64_t timer = mtime();
+        int rc = runcmd(cmd);
+        if (rc != 0) {
+            #ifndef __WIN32
+                if (rc == 126) {
+                    crash("EXECUTE target \"%s\" could not be run (permission denied - is it executable?) - halting build", target);
+                }
+            #endif
+            crash("EXECUTE target \"%s\" \033[31mfailed\033[0m with exit code %d - halting build", target, rc);
+        }
+        int hours, minutes;
+        float seconds;
+        dissect_time_elapsed(timer, &hours, &minutes, &seconds);
+        print("\033[32mFinished\033[0m executing \"%s\" in %d:%d:%.3f", line, hours, minutes, seconds);
+        curr = (PathList*)curr->next;
+    }
+}
+
 int main(int argc, char* argv[]) {
     s_max_argsc = argc;
     initialize(argc, argv);
+    run_executes();
     integrate_modules();
     affirm_projects();
     if (s_flags & AUDIT) audit();
@@ -2264,6 +2346,7 @@ int main(int argc, char* argv[]) {
     pathlist_delete(s_includes);
     pathlist_delete(s_links);
     pathlist_delete(s_defines);
+    pathlist_delete(s_executes);
     pathlist_delete(s_libs);
     pathlist_delete(s_raws);
     pathlist_delete(s_projects);

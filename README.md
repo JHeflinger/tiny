@@ -46,6 +46,7 @@ To configure Tiny to be a bit more accustomed to your use, make a `.tinyconf` fi
 | RAW | <raw_arg> | Here you can pass a raw argument to gcc |
 | MODULE | <module_name> <git_link> <internal_path> | Here you can link a tiny module that will automatically download and include into your project with zero hassle! |
 | PORT | <path_to_directory> | Here you can symbolicly link folders into the tiny build/run environment - this is great for assets! |
+| EXECUTE | <path_to_runnable> <optional args...> | Here you can specify a runnable program or script to run before the build process |
 
 Additionally, you can also preface each configuration line with an operating system to use it exclusively on that operating system build! Some example usage of this feature may look like the following:
 
