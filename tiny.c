@@ -1148,6 +1148,13 @@ void syntax_audit(const char* file) {
     if (!fp) {
         crash("Failed to open file");
     }
+    int has_header = 0;
+    if (source) {
+        char hpath[PATHLEN] = { 0 };
+        strncpy(hpath, file, PATHLEN - 1);
+        hpath[slen - 1] = 'h';
+        has_header = fexists(hpath);
+    }
     char line[PATHLEN * 2] = { 0 };
     int linecount = 0;
     int prev_empty = 0;
@@ -1287,7 +1294,7 @@ void syntax_audit(const char* file) {
             }
         }
         if (source) {
-            if (line[0] != 0 && line[0] != '\n' && line[0] != '\r' && line[0] != ' ' && line[0] != '\t') {
+            if (has_header && line[0] != 0 && line[0] != '\n' && line[0] != '\r' && line[0] != ' ' && line[0] != '\t') {
                 if (!strstr(line, "static") &&
                     !strstr(line, "extern") &&
                     !strstr(line, "#") &&
