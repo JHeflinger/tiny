@@ -209,6 +209,9 @@ void walkdir(const char* path, FileHandler func);
 void walkfiles(const char* path, FileHandler func);
 uint64_t mtime();
 void dissect_time_elapsed(uint64_t time, int* hours, int* minutes, float* seconds);
+int ends_with(const char* str, const char* suffix);
+int is_source_file(const char* file);
+int is_header_file(const char* file);
 void integrate_modules();
 void dissect_module(const char* str);
 void download_module(const char* name, const char* url, const char* path);
@@ -734,6 +737,20 @@ void dissect_time_elapsed(uint64_t time, int* hours, int* minutes, float* second
     *hours = (int)(time / 3600000);
     *minutes = (int)((time - (*hours * 3600000)) / 60000);
     *seconds = (((float)time) - (*hours * 3600000) - (*minutes * 60000)) / 1000.0f;
+}
+
+int ends_with(const char* str, const char* suffix) {
+    size_t slen = strlen(str);
+    size_t xlen = strlen(suffix);
+    return slen > xlen && strcmp(str + slen - xlen, suffix) == 0;
+}
+
+int is_source_file(const char* file) {
+    return ends_with(file, ".c") || ends_with(file, ".cpp");
+}
+
+int is_header_file(const char* file) {
+    return ends_with(file, ".h") || ends_with(file, ".hpp");
 }
 
 void integrate_modules() {
@@ -1450,15 +1467,14 @@ void affirm_to_cache(const char* dir) {
 
 void add_to_sources(const char* file) {
     if (strstr(file, "build/cache") == &(file[0]) || strstr(file, "./build/cache") == &(file[0])) return;
-    size_t slen = strlen(file);
-    if (slen > 2 && file[slen - 1] == 'c' && file[slen - 2] == '.')
+    if (is_source_file(file))
         pathlist_add(&s_sources, file);
 }
 
 void verify_header(const char* file) {
     if (strstr(file, "build/cache") == &(file[0]) || strstr(file, "./build/cache") == &(file[0])) return;
     size_t slen = strlen(file);
-    if (slen > 2 && (file[slen - 1] != 'h' || file[slen - 2] != '.')) return;
+    if (!is_header_file(file)) return;
     int basename_ptr = 0;
     for (int i = slen; i > 0; i--) {
         if (file[i] == '/' || file[i] == '\\') {
@@ -1482,7 +1498,7 @@ void verify_header(const char* file) {
 void accumulate_header(const char* file) {
     if (strstr(file, "build/cache") == &(file[0]) || strstr(file, "./build/cache") == &(file[0])) return;
     size_t slen = strlen(file);
-    if (slen > 2 && (file[slen - 1] != 'h' || file[slen - 2] != '.')) return;
+    if (!is_header_file(file)) return;
     int basename_ptr = 0;
     for (int i = slen; i > 0; i--) {
         if (file[i] == '/' || file[i] == '\\') {
@@ -1548,7 +1564,7 @@ void async_compile(void* params) {
 void compile_source(const char* file) {
     if (strstr(file, "build/cache") == &(file[0]) || strstr(file, "./build/cache") == &(file[0])) return;
     size_t slen = strlen(file);
-    if (slen > 2 && (file[slen - 1] != 'c' || file[slen - 2] != '.')) return;
+    if (!is_source_file(file)) return;
     int basename_ptr = 0;
     for (int i = slen; i > 0; i--) {
         if (file[i] == '/' || file[i] == '\\') {
