@@ -1,6 +1,12 @@
 # Change Log
 All notable changes to this project will be documented in this file as of Tiny v1.0
 
+## Tiny 1.2.6
+
+### Added
+
+- new configuration option "COMPILER" allows users to specify a compiler other than gcc
+
 ## Tiny 1.2.5
 
 ### Added

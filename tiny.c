@@ -5,7 +5,7 @@
 
 #define VERSION 1
 #define MAJOR_RELEASE 2
-#define MINOR_RELEASE 5
+#define MINOR_RELEASE 6
 
 #include <stdio.h>
 #include <time.h>
@@ -287,6 +287,7 @@ ModuleList* s_modules = NULL;
 char** s_copy_argsv = NULL;
 int s_copy_argsc = 0;
 int s_max_argsc = 0;
+char s_compiler[PATHLEN] = "gcc";
 
 #ifdef __linux__
     void run_build() {
@@ -1606,7 +1607,8 @@ void compile_source(const char* file) {
         char* commandbuf = calloc(strlen(incbuf) + strlen(linkbuf) + strlen(libbuf) + PATHLEN, sizeof(char));
         sprintf(
             commandbuf,
-            "gcc %s-Wall -Wextra -Wno-unused-parameter -c %s %s%s%s-o %s.o %s %s",
+            "%s %s-Wall -Wextra -Wno-unused-parameter -c %s %s%s%s-o %s.o %s %s",
+            s_compiler,
             defbuf,
             file,
             incbuf,
@@ -1891,6 +1893,15 @@ void configure(const char* prepath, const char* path) {
             pathlist_add(&s_raws, line + postcursor);
         } else if (strcmp(precursor, "MODULE") == 0) {
             dissect_module(line + postcursor);
+        } else if (strcmp(precursor, "COMPILER") == 0) {
+            if (prepath[0] != '\0') {
+                warn("COMPILER is only supported in the root \".tinyconf\" - ignoring it on line %d of \"%s\"", linecount, path);
+            } else if (postcursor == 0 || line[postcursor] == '\0') {
+                crash("COMPILER on line %d of \".tinyconf\" requires a compiler command (e.g. g++)", linecount);
+            } else {
+                memset(s_compiler, 0, PATHLEN);
+                strncpy(s_compiler, line + postcursor, PATHLEN - 1);
+            }
         } else if (strcmp(precursor, "EXECUTE") == 0) {
             if (prepath[0] != '\0') {
                 warn("EXECUTE is only supported in the root \".tinyconf\" - ignoring it on line %d of \"%s\"", linecount, path);
@@ -1998,7 +2009,8 @@ void compile_vendors() {
         char* commandbuf = calloc(strlen(incbuf) + strlen(linkbuf) + strlen(libbuf) + PATHLEN, sizeof(char));
         sprintf(
             commandbuf,
-            "gcc %s-Wall -Wextra -Wno-unused-parameter -c build/vendor/tiny_merged_vendors.c %s%s%s-o build/vendor/vendor.o %s%s",
+            "%s %s-Wall -Wextra -Wno-unused-parameter -c build/vendor/tiny_merged_vendors.c %s%s%s-o build/vendor/vendor.o %s%s",
+            s_compiler,
             defbuf,
             incbuf,
             libbuf,
@@ -2121,7 +2133,8 @@ void compile_executable() {
     char* commandbuf = calloc(strlen(incbuf) + strlen(linkbuf) + strlen(libbuf) + strlen(objbuf) + PATHLEN, sizeof(char));
     sprintf(
         commandbuf,
-        "gcc %s-Wall -Wextra -Wno-unused-parameter %s %s%s%s%s-o build/bin.exe %s%s",
+        "%s %s-Wall -Wextra -Wno-unused-parameter %s %s%s%s%s-o build/bin.exe %s%s",
+        s_compiler,
         defbuf,
         s_main_file_path,
         objbuf,
