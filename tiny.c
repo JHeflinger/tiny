@@ -5,7 +5,7 @@
 
 #define VERSION 1
 #define MAJOR_RELEASE 2
-#define MINOR_RELEASE 6
+#define MINOR_RELEASE 7
 
 #include <stdio.h>
 #include <time.h>
@@ -140,7 +140,8 @@ typedef enum {
     RECOMPILE_VENDORS = 1 << 4,
     RUN = 1 << 5,
     CLEAN = 1 << 6,
-    UPDATE_MODULES = 1 << 7
+    UPDATE_MODULES = 1 << 7,
+    QUIET_VENDORS = 1 << 8
 } BuildFlags;
 
 typedef struct {
@@ -1782,6 +1783,12 @@ void parseflag(char* flag, int blacklistable) {
         } else {
             s_unflags |= UPDATE_MODULES;
         }
+    } else if (strcmp("-qv", buffer) == 0 || strcmp("-quiet_vendors", buffer) == 0) {
+        if (whitelist && !(s_unflags & QUIET_VENDORS)) {
+            s_flags |= QUIET_VENDORS;
+        } else {
+            s_unflags |= QUIET_VENDORS;
+        }
     } else {
         crash("Unknown flag \"%s\" detected", buffer);
     }
@@ -2025,9 +2032,10 @@ void compile_vendors() {
         char* commandbuf = calloc(strlen(incbuf) + strlen(linkbuf) + strlen(libbuf) + PATHLEN, sizeof(char));
         sprintf(
             commandbuf,
-            "%s %s-Wall -Wextra -Wno-unused-parameter -c build/vendor/tiny_merged_vendors.c %s%s%s-o build/vendor/vendor.o %s%s",
+            "%s %s%s-c build/vendor/tiny_merged_vendors.c %s%s%s-o build/vendor/vendor.o %s%s",
             s_compiler,
             defbuf,
+            s_flags & QUIET_VENDORS ? "" : "-Wall -Wextra -Wno-unused-parameter ",
             incbuf,
             libbuf,
             linkbuf,

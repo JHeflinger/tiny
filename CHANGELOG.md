@@ -1,6 +1,12 @@
 # Change Log
 All notable changes to this project will be documented in this file as of Tiny v1.0
 
+## Tiny 1.2.7
+
+### Added
+
+- new flag option "-qv" to suppress warnings when compiling vendors
+
 ## Tiny 1.2.6
 
 ### Added

@@ -88,6 +88,7 @@ There are also some various flags you can add to customize your build process! Y
 | -r | runs the built executable upon success from the `build/env/` folder - any following arguments will be forwarded to the executable |
 | -c | cleans the cache (if you want a full cleanbuild, just delete the entire `build` folder!) |
 | -u | updates all modules to their latest version |
+| -qv | suppresses warnings when compiling vendors |
 
 ## OUTPUT
 
