@@ -1,6 +1,12 @@
 # Change Log
 All notable changes to this project will be documented in this file as of Tiny v1.0
 
+## Tiny 1.2.8
+
+### Fixed
+
+- inline functions won't trigger the translation protection audit
+
 ## Tiny 1.2.7
 
 ### Added

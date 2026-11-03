@@ -5,7 +5,7 @@
 
 #define VERSION 1
 #define MAJOR_RELEASE 2
-#define MINOR_RELEASE 7
+#define MINOR_RELEASE 8
 
 #include <stdio.h>
 #include <time.h>
@@ -1313,6 +1313,12 @@ void syntax_audit(const char* file) {
             }
         }
         if (source) {
+            if (strstr(line, "inline ") == line) {
+                size_t llen = strlen(line);
+                for (size_t i = 0; i < llen - 7; i++) {
+                    line[i] = line[i + 7];
+                }
+            }
             if (has_header && line[0] != 0 && line[0] != '\n' && line[0] != '\r' && line[0] != ' ' && line[0] != '\t') {
                 if (!strstr(line, "static") &&
                     !strstr(line, "extern") &&
