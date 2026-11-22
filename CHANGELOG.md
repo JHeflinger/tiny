@@ -1,6 +1,13 @@
 # Change Log
 All notable changes to this project will be documented in this file as of Tiny v1.0
 
+## Tiny 1.2.9
+
+### Changed
+
+- EXECUTE can run in submodules as well
+- EXECUTE is run after module integration
+
 ## Tiny 1.2.8
 
 ### Fixed

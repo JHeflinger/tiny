@@ -5,7 +5,7 @@
 
 #define VERSION 1
 #define MAJOR_RELEASE 2
-#define MINOR_RELEASE 8
+#define MINOR_RELEASE 9
 
 #include <stdio.h>
 #include <time.h>
@@ -1932,12 +1932,15 @@ void configure(const char* prepath, const char* path) {
                 strncpy(s_compiler, line + postcursor, PATHLEN - 1);
             }
         } else if (strcmp(precursor, "EXECUTE") == 0) {
-            if (prepath[0] != '\0') {
-                warn("EXECUTE is only supported in the root \".tinyconf\" - ignoring it on line %d of \"%s\"", linecount, path);
-            } else if (postcursor == 0 || line[postcursor] == '\0') {
+            if (postcursor == 0 || line[postcursor] == '\0') {
                 crash("EXECUTE on line %d of \".tinyconf\" requires a path to a script or executable", linecount);
             } else {
-                pathlist_append(&s_executes, line + postcursor);
+                if (prepath[0] != '\0') {
+                    snprintf(workbuffer, PATHLEN, "%s%s", prepath, line + postcursor);
+                    pathlist_append(&s_executes, workbuffer);
+                } else {
+                    pathlist_append(&s_executes, line + postcursor);
+                }
             }
         } else if (strcmp(precursor, "PORT") == 0) {
             snprintf(workbuffer, PATHLEN, "%s%s", prepath, line + postcursor);
@@ -2390,8 +2393,8 @@ void run_ports() {
 int main(int argc, char* argv[]) {
     s_max_argsc = argc;
     initialize(argc, argv);
-    run_executes();
     integrate_modules();
+    run_executes();
     run_ports();
     affirm_projects();
     if (s_flags & AUDIT) audit();
