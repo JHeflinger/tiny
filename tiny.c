@@ -5,7 +5,7 @@
 
 #define VERSION 1
 #define MAJOR_RELEASE 2
-#define MINOR_RELEASE 9
+#define MINOR_RELEASE 10
 
 #include <stdio.h>
 #include <time.h>
@@ -141,7 +141,8 @@ typedef enum {
     RUN = 1 << 5,
     CLEAN = 1 << 6,
     UPDATE_MODULES = 1 << 7,
-    QUIET_VENDORS = 1 << 8
+    QUIET_VENDORS = 1 << 8,
+    TEST = 1 << 9
 } BuildFlags;
 
 typedef struct {
@@ -256,7 +257,9 @@ void compile_executable();
 void get_in_depth_headers(const char* dive_header, HeaderLinkList* update_header);
 void audit();
 void port_folder(const char* path);
+void run_scripts(PathList* list, const char* label);
 void run_executes();
+void run_tests();
 void run_ports();
 
 size_t s_start_time = 0;
@@ -279,6 +282,7 @@ PathList* s_sources = NULL;
 PathList* s_objects = NULL;
 PathList* s_executes = NULL;
 PathList* s_ports = NULL;
+PathList* s_tests = NULL;
 PathList* s_changed_headers = NULL;
 HeaderLinkList* s_header_links = NULL;
 HeaderLinkList* s_source_links = NULL;
@@ -1789,6 +1793,12 @@ void parseflag(char* flag, int blacklistable) {
         } else {
             s_unflags |= UPDATE_MODULES;
         }
+    } else if (strcmp("-t", buffer) == 0 || strcmp("-test", buffer) == 0) {
+        if (whitelist && !(s_unflags & TEST)) {
+            s_flags |= TEST;
+        } else {
+            s_unflags |= TEST;
+        }
     } else if (strcmp("-qv", buffer) == 0 || strcmp("-quiet_vendors", buffer) == 0) {
         if (whitelist && !(s_unflags & QUIET_VENDORS)) {
             s_flags |= QUIET_VENDORS;
@@ -1940,6 +1950,17 @@ void configure(const char* prepath, const char* path) {
                     pathlist_append(&s_executes, workbuffer);
                 } else {
                     pathlist_append(&s_executes, line + postcursor);
+                }
+            }
+        } else if (strcmp(precursor, "TEST") == 0) {
+            if (postcursor == 0 || line[postcursor] == '\0') {
+                crash("TEST on line %d of \"%s\" requires a path to a test script or executable", linecount, path);
+            } else {
+                if (prepath[0] != '\0') {
+                    snprintf(workbuffer, PATHLEN, "%s%s", prepath, line + postcursor);
+                    pathlist_append(&s_tests, workbuffer);
+                } else {
+                    pathlist_append(&s_tests, line + postcursor);
                 }
             }
         } else if (strcmp(precursor, "PORT") == 0) {
@@ -2328,8 +2349,8 @@ void port_folder(const char* path) {
     }
 }
 
-void run_executes() {
-    PathList* curr = s_executes;
+void run_scripts(PathList* list, const char* label) {
+    PathList* curr = list;
     while (curr != NULL) {
         const char* line = curr->str;
         char target[PATHLEN] = { 0 };
@@ -2344,7 +2365,7 @@ void run_executes() {
             }
         }
         if (!fexists(target)) {
-            crash("EXECUTE target \"%s\" does not exist - check the path in \".tinyconf\"", target);
+            crash("%s target \"%s\" does not exist - check the path in \".tinyconf\"", label, target);
         }
         char cmd[PATHLEN * 2] = { 0 };
         #ifdef __WIN32
@@ -2357,7 +2378,7 @@ void run_executes() {
         #else
             char* quoted = generate_quote(target);
             if (!quoted) {
-                crash("Unable to prepare EXECUTE target \"%s\"", target);
+                crash("Unable to prepare %s target \"%s\"", label, target);
             }
             snprintf(cmd, sizeof(cmd), "%s%s%s%s", strchr(target, '/') ? "" : "./", quoted, args[0] ? " " : "", args);
             free(quoted);
@@ -2369,10 +2390,10 @@ void run_executes() {
         if (rc != 0) {
             #ifndef __WIN32
                 if (rc == 126) {
-                    crash("EXECUTE target \"%s\" could not be run (permission denied - is it executable?) - halting build", target);
+                    crash("%s target \"%s\" could not be run (permission denied - is it executable?) - halting build", label, target);
                 }
             #endif
-            crash("EXECUTE target \"%s\" \033[31mfailed\033[0m with exit code %d - halting build", target, rc);
+            crash("%s target \"%s\" \033[31mfailed\033[0m with exit code %d - halting build", label, target, rc);
         }
         int hours, minutes;
         float seconds;
@@ -2380,6 +2401,23 @@ void run_executes() {
         print("\033[32mFinished\033[0m executing \"%s\" in %d:%d:%.3f", line, hours, minutes, seconds);
         curr = (PathList*)curr->next;
     }
+}
+
+void run_executes() {
+    run_scripts(s_executes, "EXECUTE");
+}
+
+void run_tests() {
+    if (s_tests == NULL) {
+        crash("Testing was requested but no TEST script is specified in \".tinyconf\"");
+    }
+    print("Running tests...");
+    uint64_t timer = mtime();
+    run_scripts(s_tests, "TEST");
+    int hours, minutes;
+    float seconds;
+    dissect_time_elapsed(timer, &hours, &minutes, &seconds);
+    print("\033[32mAll tests passed\033[0m in %d:%d:%.3f", hours, minutes, seconds);
 }
 
 void run_ports() {
@@ -2419,6 +2457,10 @@ int main(int argc, char* argv[]) {
     float seconds;
     dissect_time_elapsed(s_start_time, &hours, &minutes, &seconds);
     print("\033[32mFinished\033[0m total build in %d:%d:%.3f", hours, minutes, seconds);
+    if (s_flags & TEST) {
+        run_tests();
+    }
+    pathlist_delete(s_tests);
     if (s_flags & FAST) {
         free(s_threads);
         free(s_active_threads);

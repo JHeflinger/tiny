@@ -48,6 +48,7 @@ To configure Tiny to be a bit more accustomed to your use, make a `.tinyconf` fi
 | PORT | <path_to_directory> | Here you can symbolicly link folders into the tiny build/run environment - this is great for assets! |
 | EXECUTE | <path_to_runnable> <optional_args> | Here you can specify a runnable program or script to run before the build process |
 | COMPILER | <compiler> | Here you can specify a compiler other than gcc |
+| TEST | <path_to_test> | Here you can specify a test executable to run |
 
 Additionally, you can also preface each configuration line with an operating system to use it exclusively on that operating system build! Some example usage of this feature may look like the following:
 
@@ -89,6 +90,7 @@ There are also some various flags you can add to customize your build process! Y
 | -c | cleans the cache (if you want a full cleanbuild, just delete the entire `build` folder!) |
 | -u | updates all modules to their latest version |
 | -qv | suppresses warnings when compiling vendors |
+| -t | runs tests |
 
 ## OUTPUT
 

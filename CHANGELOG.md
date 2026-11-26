@@ -1,6 +1,13 @@
 # Change Log
 All notable changes to this project will be documented in this file as of Tiny v1.0
 
+## Tiny 1.2.10
+
+### Added
+
+- TEST can point to a test script to run
+- -t flag will run test scripts in order
+
 ## Tiny 1.2.9
 
 ### Changed
